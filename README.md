@@ -17,6 +17,24 @@ fresh breeze, squall line), medals, a debrief after every flight, and
 free flight whenever you just want to watch the sun come up. Original
 name, art and sounds; no real aircraft, airline or place names.
 
+## Highlights
+
+- **Three flyable aircraft** to pick on the title screen — the Aurora
+  bush plane, a twin-engine airliner and a delta-wing fighter — each
+  with its own modelled exterior; the flight model stays the same
+  honest one for all.
+- **A living island**: ~3,200 trees in six kinds, forests flanking
+  every road, pine lines along the strips, watchtowers, villages, a
+  church bell tower, silos, a windmill, two rivers with banks and
+  ponds, boats and a lighthouse — all procedural, all offline.
+- **Golden-hour rendering**: HDR bloom, ACES tone mapping, volumetric
+  clouds, glittering sea with foam lines, and a full glass-cockpit
+  HUD (speed/altitude tapes, attitude, radar, systems) that reads the
+  same in chase, cockpit and tower cameras.
+- **Deterministic by construction**: fixed seeds and a 120 Hz
+  substep, so every judged screenshot is a live render of the exact
+  frame the game produces.
+
 ## Play
 
 Open `game/index.html` in a desktop browser — or serve the folder:

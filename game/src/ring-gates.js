@@ -26,7 +26,8 @@ const TODO_HEX = 0x5ee86a;      // softer green — upcoming gates
 const CHEVRON_HEX = 0xeaffea;   // cool white fly-through cue
 const HALO_SCALE = 1.75;        // halo disc radius / hoop centre radius
 const BADGE_FONT = '800 92px AuroraSans, "Segoe UI", system-ui, -apple-system, Arial, sans-serif';
-const NEXT_GLOW = 2.8;          // emissive intensity, active hoop (bloom range)
+const NEXT_GLOW = 2.2;          // emissive intensity, active hoop (bloom range; kept
+                                // moderate so bloom cannot fill the opening face-on)
 const TODO_GLOW = 1.35;
 
 const caches = {
@@ -71,31 +72,25 @@ function lcg(seed) {
 
 // ------------------------------------------------------------- textures
 
-// Radial halo profile (white; material colour carries the hue): faint
-// membrane inside the hoop with three ripple rings, a bright band on
-// the rim line, then a soft falloff to nothing.
+// Radial halo profile (white; material colour carries the hue): the
+// hoop opening stays fully clear (user order 2026-11-28 — the ring
+// must read as the same open hoop from the cockpit as from chase),
+// a bright band on the rim line, then a soft falloff to nothing.
 function makeHaloTexture() {
   return paintSquare(256, (ctx, size) => {
     const c = size / 2;
     const rim = c / HALO_SCALE;
     const rimStop = rim / c;
     const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-    g.addColorStop(0, 'rgba(255,255,255,0.05)');
-    g.addColorStop(rimStop * 0.7, 'rgba(255,255,255,0.08)');
-    g.addColorStop(rimStop * 0.93, 'rgba(255,255,255,0.30)');
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(rimStop * 0.88, 'rgba(255,255,255,0)');
+    g.addColorStop(rimStop * 0.96, 'rgba(255,255,255,0.34)');
     g.addColorStop(rimStop, 'rgba(255,255,255,0.62)');
     g.addColorStop(rimStop * 1.09, 'rgba(255,255,255,0.30)');
     g.addColorStop(rimStop * 1.32, 'rgba(255,255,255,0.09)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth = 2;
-    for (const f of [0.32, 0.55, 0.78]) {
-      ctx.beginPath();
-      ctx.arc(c, c, rim * f, 0, Math.PI * 2);
-      ctx.stroke();
-    }
   });
 }
 
@@ -222,8 +217,8 @@ function haloGeometry(centreRadius) {
 function glowRingGeometry(centreRadius, tube) {
   const key = `${Math.round(centreRadius * 100)}:${Math.round(tube * 100)}`;
   return cached(caches.glowGeo, key, () => {
-    const inner = tintGeometry(new THREE.TorusGeometry(centreRadius - tube * 0.42, tube * 0.3, 8, 48), 0x00c853, 2.3);
-    const rim = tintGeometry(new THREE.TorusGeometry(centreRadius + tube * 0.58, tube * 0.14, 6, 48), 0xd6ffd0, 1.7);
+    const inner = tintGeometry(new THREE.TorusGeometry(centreRadius - tube * 0.42, tube * 0.3, 8, 48), 0x00c853, 1.9);
+    const rim = tintGeometry(new THREE.TorusGeometry(centreRadius + tube * 0.58, tube * 0.14, 6, 48), 0xd6ffd0, 1.5);
     return mergeParts([inner, rim], true);
   });
 }
