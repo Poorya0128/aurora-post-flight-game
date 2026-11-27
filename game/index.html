@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AURORA POST</title>
+<link href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M8 52 L92 8 L58 92 L46 62 Z' fill='%23FF9E64'/%3E%3C/svg%3E" rel="icon">
+<link as="font" crossorigin href="./assets/fonts/NotoSans-Variable.ttf" rel="preload" type="font/ttf">
+<link href="./style.css" rel="stylesheet">
+<link href="./concept-ui.css" rel="stylesheet">
+<script type="importmap">
+{"imports": {"three": "./vendor/three.module.min.js"}}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<!-- Grade overlay: vignette plus dawn haze, styled as #fx-grade in
+     style.css. Sits over the canvas, under the HUD, ignores input. -->
+<div aria-hidden="true" id="fx-grade"></div>
+<div id="hud"></div>
+<!-- D-132: the world builds synchronously during module eval, so the page
+     would sit blank until the first frame. This static splash paints with
+     the HTML (inline styles, no dependencies); main.js removes it after
+     the first rendered frame. -->
+<div id="loading" style="z-index:10;letter-spacing:0.12em;font-size:20px;font-family:'AuroraSans','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;color:#FFD9A0;background:#2B3A67;justify-content:center;align-items:center;display:flex;inset:0;position:fixed;">
+<div class="splash">
+<div class="splash-title">AURORA POST</div>
+<div class="splash-sub">DAWN MAIL · LOADING THE ARCHIPELAGO</div>
+<div class="splash-bar"><span></span></div>
+</div>
+</div>
+<script src="./src/main.js" type="module"></script>
+</body>
+</html>

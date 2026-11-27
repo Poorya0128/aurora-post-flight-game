@@ -1,0 +1,2151 @@
+/* AURORA POST — HUD and menu styling (A8, per ui_spec.md).
+   Dawn palette, system fonts only, no external resources.
+   Reference layout 1280x720; hud.js scales #hud-stage to fit any window. */
+
+:root {
+  --sky-zenith: #2B3A67;
+  --sky-mid: #7A5C8F;
+  --sky-horizon: #FF9E64;
+  --sun: #FFD166;
+  --sea-deep: #123C5A;
+  --mail-red: #D64541;
+  --btn-red: #C93A36; /* buttons only (white on this ≈4.9:1); livery red stays #D64541 (VD-20) */
+  --cream: #F2EDE4;
+  --panel-bg: rgba(10, 14, 24, 0.74);
+  --panel-bg-solid: rgba(10, 14, 24, 0.88);
+  --panel-border: rgba(255, 255, 255, 0.28);
+  --text: #FFFFFF;
+  --label: #FFD9A0;
+  --amber: #FFD166;
+  --amber-deep: #FF9F1C;
+  --green: #7DFFB2;
+  --red: #FF3B30;
+  --red-soft: #FF6B6B;
+  --font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sky-zenith);
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-ui);
+  overflow: hidden;
+}
+
+/* 1280x720 reference stage, scaled by hud.js (transform-origin centre). */
+#hud-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1280px;
+  height: 720px;
+  transform-origin: center center;
+}
+
+/* ---------- shared panel / text ---------- */
+
+.hud-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  /* Inner top highlight, pure CSS (visual_spec §7). */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+@supports not (backdrop-filter: blur(3px)) {
+  .hud-panel { background: var(--panel-bg-solid); }
+}
+
+.hud-label {
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.25;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.hud-value {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.hud-value-small {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.hud-unit {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--label);
+  text-align: center;
+}
+
+/* ---------- primary flight panels ---------- */
+
+#hud-alt-panel {
+  top: 196px;
+  left: 24px;
+  width: 148px;
+  height: 72px;
+}
+#hud-spd-panel {
+  top: 196px;
+  right: 24px;
+  width: 148px;
+  height: 72px;
+}
+#hud-vs-panel {
+  top: 276px;
+  left: 24px;
+  width: 148px;
+  height: 40px;
+}
+#hud-thr-panel {
+  top: 276px;
+  right: 24px;
+  width: 148px;
+  height: 40px;
+}
+#hud-flap-panel {
+  top: 324px;
+  left: 24px;
+  width: 148px;
+  height: 40px;
+}
+#hud-wind-panel {
+  top: 324px;
+  right: 24px;
+  width: 148px;
+  height: 40px;
+}
+
+/* VD6-01/VD6-02 (V6-HUD-FIXER): glass instruments get explicit slots in
+   the side columns — left stack ALT/V/S/FLAPS/ADI, right stack
+   SPD/THROTTLE/WIND/ENGINE. No panel overlaps another at 1280x720:
+   left ADI 372-528 clears AIRFRAME (592); right ENGINE 372-508 clears
+   the minimap (516). ALT/SPD/HDG stay visible in chase/tower/cockpit
+   (instruments hide in cockpit by design, hud-instruments.js). */
+#hud-adi-panel { left: 24px; top: 372px; width: 148px; height: 156px; padding: 4px 6px; }
+#hud-engine-panel { right: 24px; top: 372px; width: 148px; height: 136px; padding: 4px 6px; }
+.hud-instrument { overflow: hidden; }
+.hud-instrument-canvas { display: block; flex: 0 0 auto; }
+.hud-instrument-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
+  text-align: center;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+#hud-vs-panel .hud-value-small.vs-climb { color: var(--green); }
+#hud-vs-panel .hud-value-small.vs-sink  { color: var(--red-soft); }
+
+/* mini tape: three tick labels under the digital value */
+.hud-tape {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 124px;
+  height: 16px;
+  margin-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.hud-tape span { flex: 1 1 0; text-align: center; }
+.hud-tape .tape-centre { color: var(--amber); }
+
+/* stall band marker on the speed tape */
+#hud-spd-tape .tape-stall { color: var(--red-soft); }
+
+/* ---------- heading ribbon ---------- */
+
+#hud-hdg-panel {
+  top: 24px;
+  left: 50%;
+  width: 420px;
+  height: 52px;
+  padding: 0;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+#hud-hdg-strip {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 420px;
+  height: 24px;
+  overflow: hidden;
+  /* Glyphs fade out at both edges so numerals are never half-sliced
+     (VD-05). The mask sits on this fixed viewport; the inner strip
+     is the part that scrolls. */
+  mask-image: linear-gradient(90deg, transparent, #000 24px, #000 396px, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px, #000 396px, transparent);
+}
+
+#hud-hdg-strip-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 24px;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.hdg-tick {
+  position: absolute;
+  top: 18px;
+  width: 2px;
+  height: 6px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.hdg-tick-label {
+  position: absolute;
+  top: 0;
+  width: 60px;
+  margin-left: -30px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.hdg-tick-label.cardinal { font-size: 18px; font-weight: 800; color: var(--amber); }
+
+/* Amber caret over the ribbon: a 12x8 inline SVG (data-URI, so no
+   external request) with a dark stroke — vector-crisp at any stage
+   scale (VD-18, visual_spec §4.2). */
+#hud-hdg-caret {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 8px;
+  margin-left: -6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1 L11 1 L6 7 Z' fill='%23FFD166' stroke='%23000000' stroke-opacity='0.55' stroke-width='1' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 8px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+
+#hud-hdg {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  left: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+/* ---------- top-centre score / objective / warnings ---------- */
+
+#hud-score-panel {
+  top: 84px;
+  left: 50%;
+  width: 300px;
+  height: 36px;
+  transform: translateX(-50%);
+}
+
+#hud-score-panel .hud-value-small.time-low { color: var(--red-soft); }
+
+#hud-objective-panel {
+  top: 128px;
+  left: 50%;
+  width: 420px;
+  min-height: 36px;
+  transform: translateX(-50%);
+}
+
+#hud-objective {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  text-align: center;
+}
+
+#hud-progress {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--green);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+#hud-warnings {
+  position: absolute;
+  left: 50%;
+  /* VD6-16 (V6-HUD-FIXER): default below the tallest (two-line)
+     objective panel (128 + 70 + 10); hud.js re-anchors to the live
+     objective height every frame, so pills never print over it. */
+  top: 208px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 520px;
+  transform: translateX(-50%);
+}
+
+/* Warning pills carry a triangle icon (inline SVG data-URI, no
+   external request) plus text at top-centre with a blink — state is
+   never colour alone (VD-18, ui_spec §5). Red pills keep the larger
+   28 px type as a second non-colour cue. */
+.warning-pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 18px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  color: var(--amber);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.14em; /* labels track at .14em (VD-29) */
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  text-transform: uppercase;
+}
+
+.warning-pill::before {
+  content: "";
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3 L22 20 L2 20 Z' fill='none' stroke='%23FFD166' stroke-width='2.4' stroke-linejoin='round'/%3E%3Crect x='11' y='9' width='2' height='6' fill='%23FFD166'/%3E%3Crect x='11' y='16.5' width='2' height='2' fill='%23FFD166'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 18px 18px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.85));
+}
+
+.warning-pill.warning-red::before {
+  flex-basis: 24px;
+  width: 24px;
+  height: 24px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3 L22 20 L2 20 Z' fill='none' stroke='%23FF3B30' stroke-width='2.4' stroke-linejoin='round'/%3E%3Crect x='11' y='9' width='2' height='6' fill='%23FF3B30'/%3E%3Crect x='11' y='16.5' width='2' height='2' fill='%23FF3B30'/%3E%3C/svg%3E");
+  background-size: 24px 24px;
+}
+
+.warning-pill.warning-red { color: var(--red); font-size: 28px; }
+.warning-pill.warning-blink { animation: hud-blink 0.5s steps(1, end) infinite; }
+
+@keyframes hud-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0.25; }
+}
+
+/* ---------- bottom-left fuel / damage ---------- */
+
+#hud-fuel-panel { left: 24px; bottom: 24px; width: 220px; height: 56px; }
+#hud-damage-panel { left: 24px; bottom: 88px; width: 220px; height: 40px; }
+
+.hud-bar-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.hud-bar {
+  flex: 0 1 auto;
+  width: 172px;
+  height: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+}
+
+.hud-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--amber);
+  border-radius: 6px;
+  /* Presentation smoothing only: the % text beside the bar stays the
+     instant true value; the fill eases between the existing 0.5%
+     steps so it never jumps. At 0.12 s a warning band change is
+     never meaningfully lagged (18-MOTION). */
+  transition: width 0.12s linear;
+}
+
+#hud-fuel-fill { background: var(--amber); }
+#hud-fuel-fill.fuel-low { background: var(--amber-deep); }
+#hud-fuel-fill.fuel-critical { background: var(--red); animation: hud-blink-slow 1s steps(1, end) infinite; }
+#hud-damage-fill { background: var(--green); }
+#hud-damage-fill.airframe-mid {
+  background: var(--amber);
+}
+#hud-damage-fill.airframe-low {
+  background: var(--red);
+}
+#hud-thr-fill {
+  background: linear-gradient(90deg, #FFD166, #FF9F1C); /* canonical amber to amber-deep (VD-24) */
+}
+
+@keyframes hud-blink-slow {
+  0%, 60% { opacity: 1; }
+  61%, 100% { opacity: 0.3; }
+}
+
+.hud-bar-pct {
+  flex: 0 0 auto;
+  min-width: 52px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+/* throttle bar is narrower inside its panel */
+#hud-thr-panel .hud-bar {
+  width: 112px;
+  height: 10px;
+}
+#hud-thr-panel .hud-bar-pct {
+  min-width: 44px;
+  font-size: 16px;
+}
+
+/* ---------- bottom-centre target ---------- */
+
+#hud-target-panel {
+  bottom: 24px;
+  left: 50%;
+  width: 240px;
+  height: 56px;
+  flex-direction: row;
+  gap: 10px;
+  transform: translateX(-50%);
+}
+
+/* Target arrow: an inline SVG triangle (built by hud.js) in
+   currentColor with a dark stroke — crisp at shrink, centred in the
+   240x56 panel. Green means ahead ±30°, amber means off; colour is
+   backed by rotation plus label/distance text, never colour alone
+   (VD-18). */
+#hud-target-arrow {
+  display: flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--green);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85));
+}
+
+#hud-target-arrow svg {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+#hud-target-arrow.arrow-off { color: var(--amber); }
+
+#hud-target-text {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* ---------- misc HUD ---------- */
+
+#hud-view-label {
+  top: 24px;
+  right: 24px;
+  min-width: 96px;
+  min-height: 28px;
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  text-transform: uppercase;
+  transition: opacity 0.4s ease;
+}
+
+#hud-view-label.faded {
+  opacity: 0;
+}
+
+/* White ring with a dark outline so the marker survives bright sky
+   and ring backgrounds; hud.js hides it in tower view (display-only,
+   reads the existing cameraMode) (VD-18, visual_spec §4.2). */
+#hud-flightpath {
+  display: none; /* removed at user order 2026-11-27 — no centre marker */
+  position: absolute;
+  top: 360px;
+  left: 640px;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  margin-left: -12px;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 4px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+#hud-flightpath::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  margin-left: -2px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+#hud-toast {
+  position: absolute;
+  left: 50%;
+  /* OVERLAP-FIX2 (Specialist 10): bottom 160 -> 120 px. At 160 the
+     settled toast top (stage y 521) sat 4.6 px under the target
+     bracket's distance tag (bottom y 526 in the cockpit-final pose,
+     worst case 552 at the tag-flip threshold). At 120 the toast top
+     is y 561 — clear of the tag in every flip state, still 79 px
+     above the cockpit target panel (top y 640/668). */
+  bottom: 120px;
+  max-width: 640px;
+  padding: 8px 20px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  /* The toast slides up into place — transform only, no layout
+     thrash (18-MOTION, visual_spec §7). */
+  transform: translate(-50%, 10px);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+}
+
+#hud-toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+#hud-keys-hint {
+  right: 24px;
+  bottom: 24px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  text-transform: uppercase;
+}
+
+/* Minimap (VD-15): square panel with a circular map inside. */
+#hud-minimap {
+  right: 24px;
+  bottom: 56px;
+  width: 148px;
+  height: 148px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel-bg-solid);
+}
+
+#hud-minimap-canvas {
+  display: block;
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+}
+
+/* flight HUD hidden while a full screen is up (unless forced for shots) */
+#hud-stage.hud-flight-hidden .hud-flight-only { display: none; }
+
+/* cockpit-minimal mode (opt-in via sim.hudMinimal): keep alt/spd/hdg,
+   objective and warnings; hide secondary panels */
+#hud-stage.hud-minimal .hud-secondary { display: none; }
+
+/* The cockpit/minimal top-pill target fork is deleted (VD-22,
+   visual_spec §2.5): the target panel is bottom-centre 240x56 in
+   every view (see #hud-target-panel above). Cockpit clearance comes
+   from the VD-08 panel shrink keeping the gauge-free band clear. */
+
+/* VD6-15 (V6-HUD-FIXER): in cockpit the 240x56 panel at bottom:24
+   covered the 3D gauge row. Shrink + drop it onto the panel skirt
+   below the gauges (668-712); text stays 18px on the dark scrim.
+   hud.js adds .hud-cockpit to the stage from the existing cameraMode. */
+#hud-stage.hud-cockpit #hud-target-panel {
+  bottom: 8px;
+  width: 260px;
+  height: 44px;
+}
+
+/* M9 (cockpit-sling-defects2): judged cockpit capture only — hud.js
+   sets .hud-shot-cockpit from forceHud (shots.js staging) + cockpit,
+   so gameplay never carries it. ALT/SPD/HDG duplicate the 3D PFD in
+   larger type: hide them so the cockpit carries the shot. Mission
+   context (score, objective, target, minimap) stays, slightly
+   translucent; warnings and the target bracket are untouched. */
+#hud-stage.hud-shot-cockpit #hud-alt-panel,
+#hud-stage.hud-shot-cockpit #hud-spd-panel,
+#hud-stage.hud-shot-cockpit #hud-hdg-panel { display: none; }
+#hud-stage.hud-shot-cockpit #hud-score-panel,
+#hud-stage.hud-shot-cockpit #hud-objective-panel,
+#hud-stage.hud-shot-cockpit #hud-minimap,
+#hud-stage.hud-shot-cockpit #hud-target-panel { opacity: 0.85; }
+
+/* VD6-08 (V6-HUD-FIXER): target bracket — dark-outlined corners + a
+   scrimmed distance pill (was bare white text on the 3D scene).
+   hud-instruments.js positions/sizes the box per frame; the tag sits
+   below the box, or above it (.tag-above) when the box is low on
+   screen so it never prints across the cockpit gauges (VD6-15). */
+#hud-target-bracket {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+.bracket-corner {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 0 solid #7DFFB2;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+}
+.bracket-tl { left: 0; top: 0; border-left-width: 3px; border-top-width: 3px; border-top-left-radius: 4px; }
+.bracket-tr { right: 0; top: 0; border-right-width: 3px; border-top-width: 3px; border-top-right-radius: 4px; }
+.bracket-bl { left: 0; bottom: 0; border-left-width: 3px; border-bottom-width: 3px; border-bottom-left-radius: 4px; }
+.bracket-br { right: 0; bottom: 0; border-right-width: 3px; border-bottom-width: 3px; border-bottom-right-radius: 4px; }
+.bracket-tag {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 6px);
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+.bracket-tag.tag-above {
+  top: auto;
+  bottom: 100%;
+  transform: translate(-50%, -6px);
+}
+.bracket-tag:empty { display: none; }
+
+/* ---------- screens ---------- */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: auto;
+  background: linear-gradient(180deg, rgba(43, 58, 103, 0.55), rgba(10, 14, 24, 0.72));
+  padding: 32px;
+}
+
+.screen.visible { display: flex; }
+
+.screen-title-display {
+  font-family: var(--font-display);
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  color: var(--cream);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  margin: 0 0 8px 0;
+}
+
+.screen-heading {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--cream);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  margin: 0 0 12px 0;
+}
+
+.screen-heading.heading-crash { color: var(--red-soft); font-size: 48px; }
+.screen-heading.heading-campaign { font-size: 48px; }
+
+.screen-subtitle {
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  text-align: center;
+  margin: 0 0 20px 0;
+  max-width: 720px;
+}
+
+.screen-card {
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  max-width: 860px;
+}
+
+/* Footer and progress text sit on solid pills — no bare text over
+   the 3D scene (VD-19, visual_spec §4.3/§4.4). Tracking .14em. */
+.screen-footer {
+  margin-top: 18px;
+  padding: 6px 14px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.screen-progress-line {
+  margin-top: 16px;
+  padding: 8px 18px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--label);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Wide card for the two-column help table (980 px grid + padding). */
+.screen-card-wide {
+  max-width: 100%;
+  width: 1040px;
+}
+
+/* buttons */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 260px;
+  min-height: 48px;
+  margin: 6px 0;
+  padding: 10px 16px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  pointer-events: auto;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.btn:hover { border-color: var(--amber); color: var(--amber); }
+.btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn:disabled:hover { border-color: var(--panel-border); color: var(--text); }
+
+.btn-primary {
+  color: #FFFFFF;
+  background: var(--btn-red);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.btn-primary:hover { color: #FFFFFF; border-color: var(--amber); }
+
+.btn-small { width: auto; min-height: 40px; padding: 8px 18px; }
+
+.btn-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* mission select cards — 12 sorties in a 4x3 grid that fits the
+   1280x720 stage without scrolling (D-08 polish; ui_spec §2.2 specced
+   6 cards at 340x150 in 3 columns, which overflows with 12). */
+#screen-missions { padding: 18px 24px; }
+#screen-missions .screen-heading { margin-bottom: 10px; }
+#screen-missions .btn-row { margin-top: 10px; }
+#screen-missions .screen-footer { margin-top: 8px; }
+
+.mission-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 292px);
+  gap: 12px;
+  justify-content: center;
+}
+
+.mission-card {
+  width: 292px;
+  height: 156px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Locked cards stay readable at 0.85 with a LOCKED meta line; the
+   next card keeps the amber border plus a 2 px top accent
+   (VD-19/VD-27, visual_spec §7). */
+.mission-card.locked {
+  opacity: 0.85;
+}
+.mission-card.locked .btn:disabled {
+  opacity: 1;
+}
+.mission-card.next {
+  border-color: var(--amber);
+  border-top: 2px solid var(--amber);
+}
+
+.mission-card-name {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+  text-align: center;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Card goals carry the full briefing text (main.js missionsData);
+   clamp to two lines so every card keeps the same height — the full
+   text is on the briefing screen (and in the title tooltip). */
+.mission-card-goal {
+  display: -webkit-box;
+  min-height: 40px;
+  margin: 4px 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.25;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* One small-button size everywhere: min-height 40 px (VD-23). */
+.mission-card .btn-small {
+  min-height: 40px;
+  margin: 2px 0 0 0;
+  padding: 8px 16px;
+}
+
+.mission-card-meta {
+  margin-bottom: 6px;
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* stat / breakdown rows */
+.stat-table {
+  width: 560px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.stat-row-label {
+  color: var(--label);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.stat-row-value {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.stat-row-total .stat-row-label { font-size: 18px; font-weight: 800; color: var(--label); }
+.stat-row-total .stat-row-value { font-size: 28px; font-weight: 800; color: var(--amber); }
+
+.grade-letter {
+  font-family: var(--font-display);
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--amber);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+
+.medal-line {
+  color: var(--amber);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.verdict-line {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--cream);
+  text-align: center;
+  max-width: 720px;
+  margin-bottom: 12px;
+}
+
+/* briefing */
+.briefing-body {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: center;
+  max-width: 720px;
+  margin: 0 0 12px 0;
+}
+
+.briefing-list {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: center;
+  margin: 0 0 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.briefing-list li { text-align: center; margin: 2px 0; }
+
+/* Help — 21 rows verbatim from input.js HELP_HTML (D-146).
+   16 px type on the solid navy card (VD-19/VD-13, visual_spec
+   §3.3/§4.4); tight row padding and gaps so the last row plus the
+   BACK button fit the 720 px stage without clipping. The font
+   size never drops. */
+#screen-help { padding: 20px 24px; }
+#screen-help .screen-heading { margin-bottom: 6px; }
+#screen-help .screen-subtitle { margin-bottom: 8px; }
+#screen-help .btn { margin-top: 10px; }
+#screen-help .screen-footer { margin-top: 10px; }
+
+.help-note {
+  max-width: 980px;
+  margin: 6px 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 36px;
+  width: 980px;
+  max-width: 100%;
+}
+
+.help-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 1px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.help-key {
+  color: var(--amber);
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.help-action {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.25;
+  text-align: right;
+}
+
+/* ---------- Motion: transitions & micro-animation (18-MOTION) ----------
+   Presentation only (visual_spec motion targets, ui_spec §5):
+   quiet fades, slides and pops — no bounce, no spin, blink never
+   above 2 Hz, and displayed values are never altered or lagged. */
+
+/* Screens fade in with a gentle 10 px rise. The class toggle in
+   hud.js (display none <-> flex) restarts the animation each time
+   a screen shows; focus handling is unchanged. */
+.screen.visible {
+  animation: screen-in 0.3s ease-out;
+}
+
+@keyframes screen-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Mission cards stagger in briefly whenever the grid is rebuilt. */
+.mission-grid .mission-card {
+  animation: card-in 0.35s ease-out both;
+}
+.mission-grid .mission-card:nth-child(2) { animation-delay: 0.03s; }
+.mission-grid .mission-card:nth-child(3) { animation-delay: 0.06s; }
+.mission-grid .mission-card:nth-child(4) { animation-delay: 0.09s; }
+.mission-grid .mission-card:nth-child(5) { animation-delay: 0.12s; }
+.mission-grid .mission-card:nth-child(6) { animation-delay: 0.15s; }
+.mission-grid .mission-card:nth-child(7) { animation-delay: 0.18s; }
+.mission-grid .mission-card:nth-child(8) { animation-delay: 0.21s; }
+.mission-grid .mission-card:nth-child(9) { animation-delay: 0.24s; }
+.mission-grid .mission-card:nth-child(10) { animation-delay: 0.27s; }
+.mission-grid .mission-card:nth-child(11) { animation-delay: 0.3s; }
+.mission-grid .mission-card:nth-child(12) { animation-delay: 0.33s; }
+
+@keyframes card-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Card hover is a quiet border warm-up only — no movement. */
+.mission-card {
+  transition: border-color 0.15s ease;
+}
+.mission-card:hover {
+  border-color: var(--amber);
+}
+
+/* Buttons ease their colours and press by 1 px. The focus ring is
+   unchanged (visual_spec §2.5). */
+.btn {
+  transition: border-color 0.15s ease, color 0.15s ease,
+    background-color 0.15s ease, transform 0.08s ease;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:disabled:active {
+  transform: none;
+}
+
+/* Warning pills settle in quickly, starting at 60% opacity so the
+   warning reads from the first frame. Blink discipline (ui_spec
+   §5): hud-blink at 0.5 s is 2 Hz max, hud-blink-slow at 1 s is
+   1 Hz; nothing flashes full-screen anywhere. */
+.warning-pill {
+  animation: pill-in 0.18s ease-out;
+}
+
+@keyframes pill-in {
+  from {
+    transform: translateY(-4px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Feedback pop: a brief 7% scale settle when score, progress,
+   objective or target text changes (triggered from hud.js).
+   Transform only — the value itself is written instantly. */
+.hud-pop {
+  animation: hud-pop 0.28s ease-out;
+}
+
+@keyframes hud-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+
+/* The target arrow and heading strip are transform-driven every
+   frame, so they carry no CSS transition: hud.js feeds sub-pixel
+   values and the motion is already continuous, never trailing the
+   true value. */
+
+/* Reduced motion: everything settles instantly and warnings become
+   static pills — icon, text and position still carry the state. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* =====================================================================
+   V6.3 BASE LAYOUT (VD6-05 fix, Agent 5 V6-MENUS) — the missing layer
+   the polish overrides below always assumed. hud.js builds the V6.3
+   DOM (screen-v6, title-left, missions-body, mission-row,
+   briefing-layout, ui-tile-grid, debrief-layout, …); without these
+   rules .screen stacked everything in one centred column and content
+   taller than 720 px spilled off both ends. Every screen is budgeted
+   to fit the 1280x720 stage with margin. Menu/screen sections only —
+   HUD panel rules above are untouched.
+   ===================================================================== */
+
+.screen { overflow: hidden; }
+.screen-v6 { text-align: left; }
+.ui-icon, .medal-svg { display: block; }
+
+/* ---------- shared V6 components ---------- */
+
+.btn-rich { justify-content: flex-start; text-align: left; gap: 12px; padding: 8px 14px; }
+.btn:not(.btn-rich) { justify-content: center; }
+.btn-icon {
+  flex: 0 0 36px; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: var(--amber);
+}
+.btn-primary .btn-icon { background: rgba(255, 255, 255, 0.18); color: #FFFFFF; }
+.btn-text {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+  text-align: left;
+}
+.btn-label { font-size: 16px; font-weight: 800; letter-spacing: 0.12em; line-height: 1.15; }
+.btn-sub {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: none;
+  color: var(--ui-text-2); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.btn-primary .btn-sub { color: rgba(255, 255, 255, 0.88); }
+.btn-key, .keycap {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  border: 1px solid var(--ui-line-strong); border-bottom-width: 2px; border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08); color: var(--cream);
+  font-family: var(--font-ui); font-weight: 700; line-height: 1;
+}
+.btn-danger:hover { border-color: var(--red-soft); color: var(--red-soft); }
+
+.ui-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border: 1px solid var(--ui-line-strong); border-radius: 999px;
+  background: rgba(10, 14, 24, 0.55);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; line-height: 1;
+  color: var(--cream); white-space: nowrap;
+}
+.ui-chip-icon { display: flex; align-items: center; color: var(--amber); }
+.ui-chip-text { white-space: nowrap; }
+
+.ui-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-width: 0; padding: 10px 12px;
+  border: 1px solid var(--ui-line); border-radius: var(--ui-radius-m);
+  background: rgba(255, 255, 255, 0.04); text-align: center;
+}
+.ui-tile-head { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ui-tile-icon { display: flex; align-items: center; color: var(--amber); }
+.ui-tile-icon svg { width: 18px; height: 18px; } /* VD6-27: legible tile icons */
+.ui-tile-label { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: var(--label); line-height: 1.2; }
+.ui-tile-value {
+  display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+  font-weight: 800; line-height: 1.15; color: var(--text); font-variant-numeric: tabular-nums; text-align: center;
+}
+.ui-mini-bar { flex: 1 1 100%; display: block; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.ui-mini-bar > span { display: block; height: 100%; background: var(--amber); }
+.wind-dial { flex: 0 0 auto; }
+.ui-tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.ui-tile-grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+.card-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; letter-spacing: 0.18em; color: var(--cream); }
+.card-head-icon { display: flex; align-items: center; color: var(--amber); }
+.detail-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mission-chart { display: block; max-width: 100%; border-radius: 8px; }
+.stat-table:empty { display: none; }
+.stat-row-negative .stat-row-value { color: var(--red-soft); }
+
+/* ---------- title ---------- */
+
+#screen-title.visible { display: grid; grid-template-rows: 1fr; align-items: center; justify-content: stretch; }
+.title-left { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 10px; min-width: 0; }
+.title-emblem { display: flex; align-items: center; justify-content: center; }
+.title-emblem svg { display: block; width: 100%; height: 100%; }
+.title-kicker { font-weight: 800; color: var(--amber); text-transform: uppercase; line-height: 1.3; }
+#screen-title .screen-title-display { text-align: left; margin: 0; }
+.title-rule { width: 120px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--amber), var(--sky-horizon)); }
+#screen-title .screen-subtitle { text-align: left; margin: 0; max-width: 520px; }
+.title-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.title-menu .btn { margin: 0; }
+.logbook-card { display: flex; flex-direction: column; align-items: stretch; min-width: 0; }
+.progress-ring { display: flex; justify-content: center; }
+.logbook-medals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.logbook-medal { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.logbook-medal-art { display: flex; justify-content: center; }
+.logbook-medal-count { font-size: 16px; font-weight: 800; line-height: 1.2; color: var(--text); }
+.logbook-medal-name { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: var(--ui-text-3); }
+.logbook-next { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--ui-line); padding-top: 10px; }
+.logbook-next-label { font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: var(--label); }
+.logbook-next-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.logbook-next-title { font-size: 15px; font-weight: 800; color: var(--text); }
+.logbook-card .screen-progress-line { margin-top: 0; }
+.title-footer { position: absolute; left: 72px; right: 72px; bottom: 24px; display: flex; gap: 8px; }
+
+/* ---------- mission select ---------- */
+
+#screen-missions.visible { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; }
+.missions-header { display: flex; width: 100%; }
+.missions-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.missions-heading .screen-heading { text-align: left; margin: 0; }
+.missions-subheading { line-height: 1.3; }
+.missions-progress-box { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.missions-progress-text { font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--label); text-align: right; white-space: nowrap; }
+.missions-progress { height: 8px; border: 1px solid var(--ui-line); border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.missions-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--amber), var(--sky-horizon)); }
+.missions-body { display: grid; gap: 16px; flex: 1 1 auto; min-height: 0; width: 100%; }
+.mission-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden; }
+.tier-header { display: flex; align-items: center; gap: 8px; padding: 5px 2px 2px 2px; }
+.tier-name { font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: var(--label); }
+.tier-pips { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+.tier-pip { width: 14px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.18); }
+.tier-pip.on { background: var(--amber); }
+.mission-row {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 34px; padding: 5px 14px 5px 10px;
+  background: rgba(10, 14, 24, 0.72); border: 1px solid var(--ui-line); border-radius: 9px;
+  color: var(--text); font-family: var(--font-ui); text-align: left; cursor: pointer;
+}
+.mission-row:hover { border-color: var(--amber); }
+.mission-row.selected { border-color: var(--amber); background: rgba(255, 209, 102, 0.10); box-shadow: inset 3px 0 0 var(--amber); }
+.mission-row.locked { opacity: 0.75; }
+.mission-row.shake { animation: row-shake 0.3s ease-in-out; }
+@keyframes row-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.mission-row-icon { flex: 0 0 24px; display: flex; align-items: center; justify-content: center; }
+.mission-row-number { flex: 0 0 24px; font-size: 12px; font-weight: 800; color: var(--ui-text-3); font-variant-numeric: tabular-nums; }
+.mission-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.mission-row-title { font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mission-row-goal { font-size: 11.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mission-row-meta { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.mission-row-next { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; color: #0A0E18; background: var(--amber); padding: 2px 7px; border-radius: 999px; }
+.mission-row-medal { display: flex; align-items: center; }
+.mission-row-best { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--cream); white-space: nowrap; }
+.mission-detail { display: grid; gap: 14px; align-items: stretch; min-height: 0; }
+.detail-chart { display: flex; align-items: flex-start; justify-content: center; }
+.detail-info { display: flex; flex-direction: column; align-items: flex-start; text-align: left; min-width: 0; }
+.detail-title { margin: 0; font-weight: 800; line-height: 1.15; color: var(--cream); text-align: left; }
+.detail-goal { margin: 0; line-height: 1.45; text-align: left; }
+.detail-medal { display: flex; align-items: center; gap: 8px; }
+.detail-medal-art { display: flex; align-items: center; }
+.detail-medal-text { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: var(--ui-text-2); }
+.detail-go { margin-top: auto; }
+.mission-detail.locked .detail-chart { opacity: 0.55; }
+
+/* ---------- briefing ---------- */
+
+#screen-briefing.visible { display: flex; flex-direction: column; align-items: stretch; justify-content: center; }
+.briefing-layout { display: grid; gap: 20px; align-items: stretch; width: 100%; }
+.briefing-chart-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px 8px 12px; }
+.briefing-chart-caption { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: var(--ui-text-3); }
+.briefing-info { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 22px; text-align: left; min-width: 0; }
+.briefing-title { margin: 0; font-weight: 800; line-height: 1.15; color: var(--cream); text-align: left; }
+.briefing-info .briefing-body { text-align: left; margin: 0; max-width: none; }
+.objective-list { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.objective-item { display: flex; align-items: flex-start; gap: 8px; text-align: left; }
+.objective-icon { flex: 0 0 auto; display: flex; margin-top: 1px; color: var(--amber); }
+.objective-text { font-size: 14.5px; line-height: 1.4; color: var(--ui-text-2); }
+.briefing-info .btn-row { margin-top: auto; width: 100%; justify-content: flex-start; }
+
+/* ---------- pause ---------- */
+
+#screen-pause.visible { justify-content: center; align-items: center; }
+.pause-panel { display: flex; flex-direction: column; align-items: stretch; gap: 14px; width: 520px; max-width: 100%; padding: 24px 28px; text-align: center; }
+.pause-head { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.pause-head .screen-heading { margin: 0; }
+.pause-glyph { display: flex; gap: 5px; flex: 0 0 auto; }
+.pause-glyph span { display: block; width: 7px; height: 28px; border-radius: 3px; background: var(--amber); }
+.pause-menu { display: flex; flex-direction: column; gap: 10px; }
+.pause-menu .btn { margin: 0; width: 100%; }
+.pause-panel .stat-table { width: 100%; }
+
+/* ---------- debrief ---------- */
+
+#screen-debrief.visible { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+.debrief-layout { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: stretch; width: 100%; max-width: 1080px; }
+.debrief-hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 18px;
+  border-radius: var(--ui-radius-l); border: 1px solid var(--ui-line-strong);
+  background: linear-gradient(180deg, var(--ui-surface-top) 0%, var(--ui-surface-bottom) 100%);
+  box-shadow: inset 0 2px 0 var(--ui-accent-line), var(--ui-shadow);
+}
+.debrief-medal-art { display: flex; justify-content: center; }
+.debrief-medal-art.no-medal { opacity: 0.6; }
+.grade-ring {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 150px; height: 150px; border-radius: 50%;
+  border: 3px solid var(--amber); background: rgba(0, 0, 0, 0.25);
+}
+.grade-ring .grade-letter { font-size: 64px; }
+.grade-caption { font-size: 10px; font-weight: 800; letter-spacing: 0.16em; color: var(--label); }
+.grade-s { border-color: #FFD166; } .grade-a { border-color: #7DFFB2; }
+.grade-b { border-color: #8FC8FF; } .grade-c { border-color: #FF9E64; }
+.debrief-card { display: flex; flex-direction: column; align-items: stretch; text-align: left; width: 100%; max-width: none; }
+.debrief-card .verdict-line { text-align: left; max-width: none; margin: 0; }
+.debrief-card .stat-table { width: 100%; }
+.debrief-total { display: flex; align-items: baseline; justify-content: space-between; border-top: 1px solid var(--ui-line); padding-top: 10px; }
+.debrief-total-label { font-size: 13px; font-weight: 800; letter-spacing: 0.18em; color: var(--label); }
+.debrief-total-value { font-size: 34px; font-weight: 800; line-height: 1.1; color: var(--amber); font-variant-numeric: tabular-nums; }
+
+/* ---------- crashed ---------- */
+
+#screen-crashed.visible { justify-content: center; }
+.crash-badge {
+  display: flex; align-items: center; justify-content: center;
+  width: 76px; height: 76px; margin-bottom: 12px; border-radius: 50%;
+  background: rgba(255, 59, 48, 0.14); border: 2px solid var(--red-soft); color: var(--red-soft);
+}
+.crash-card { display: flex; flex-direction: column; align-items: stretch; width: 640px; max-width: 100%; }
+.crash-card .verdict-line { margin: 0 auto; }
+.crash-card .stat-table { width: 100%; }
+.crash-tip { font-size: 13.5px; line-height: 1.45; color: var(--ui-text-2); text-align: center; }
+
+/* ---------- campaign ---------- */
+
+#screen-campaign.visible { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+.campaign-medals { display: flex; align-items: flex-end; justify-content: center; gap: 28px; }
+.campaign-medal { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.campaign-medal-art { display: flex; justify-content: center; }
+.campaign-medal-count { font-size: 18px; font-weight: 800; line-height: 1.2; color: var(--text); }
+.campaign-medal-name { font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: var(--label); }
+#screen-campaign .screen-card { align-items: stretch; width: 640px; max-width: 100%; }
+#screen-campaign .stat-table { width: 100%; }
+
+/* ---------- help (hud.js menu screen, VD6-14) ---------- */
+
+#screen-help.visible { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+#screen-help .screen-card-wide { display: flex; flex-direction: column; align-items: stretch; text-align: left; }
+#screen-help .screen-subtitle { text-align: left; max-width: none; }
+.help-steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.help-step {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 4px; border: 1px solid var(--ui-line); border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04); text-align: center;
+}
+.help-step-number {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--amber); color: #0A0E18; font-size: 12px; font-weight: 800;
+}
+.help-step-text { font-size: 11.5px; font-weight: 700; line-height: 1.25; color: var(--cream); }
+.help-group { border: 1px solid var(--ui-line); border-radius: 9px; background: rgba(255, 255, 255, 0.03); }
+.help-group-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.help-group-icon { display: flex; align-items: center; color: var(--amber); }
+.help-group-name { font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: var(--label); }
+#screen-help .help-key { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+.help-key-word { font-size: 11px; font-weight: 700; color: var(--ui-text-3); }
+
+/* VD6-14: the in-flight help overlay (input.js, inline styles — file
+   frozen for this pass) gets an opaque, stage-fitting presentation
+   from here. !important is required to beat its inline styles. The
+   two surfaces now share the navy card language and both fit 720 px;
+   full unification still needs an input.js edit by its owner. */
+body > div[role="dialog"] { background: rgba(6, 9, 16, 0.78) !important; }
+body > div[role="dialog"] > div {
+  max-width: min(860px, 94vw) !important; max-height: 94vh !important;
+  padding: 18px 24px !important;
+  background: linear-gradient(180deg, rgba(22, 30, 50, 0.97) 0%, rgba(8, 11, 20, 0.97) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important; border-radius: 14px !important;
+  font-family: var(--font-ui) !important;
+}
+body > div[role="dialog"] h2 { font-size: 28px !important; }
+body > div[role="dialog"] p { font-size: 13.5px !important; line-height: 1.45 !important; }
+body > div[role="dialog"] table { font-size: 13.5px !important; line-height: 1.35 !important; }
+body > div[role="dialog"] td { padding-top: 1px !important; padding-bottom: 1px !important; }
+
+/* VD6-14 (cont.): one help surface per context. On the menu screens
+   main.js routes to the HUD help screen (title/missions/briefing/help),
+   the input.js flight overlay must never paint over them, whatever its
+   internal toggle state. hud.js now claims H on those screens
+   (stopPropagation) so the toggle never flips there; this :has guard
+   is the belt-and-braces for any other path that flips it. In flight
+   (no menu screen visible) the overlay shows normally, restyled above. */
+body:has(#screen-title.visible, #screen-missions.visible, #screen-briefing.visible, #screen-help.visible) > div[role="dialog"] {
+  display: none !important;
+}
+.card-head-text { line-height: 1.2; }
+
+/* =====================================================================
+   Menu polish layer — one design system for every menu screen.
+   A bundled typeface (assets/fonts, so every machine renders the
+   same letterforms offline), shared colour and radius tokens, one
+   card surface, refined buttons and keycaps, the screen top bar,
+   and per-screen sizes budgeted to fit the 1280x720 stage with
+   margin to spare.
+   ===================================================================== */
+
+@font-face {
+  font-display: block;
+  font-family: "AuroraSans";
+  font-style: normal;
+  font-weight: 100 900;
+  src: url("./assets/fonts/NotoSans-Variable.ttf") format("truetype");
+}
+
+:root {
+  --ui-accent-line: rgba(255, 209, 102, 0.42);
+  --ui-line: rgba(255, 255, 255, 0.13);
+  --ui-line-strong: rgba(255, 255, 255, 0.24);
+  --ui-radius-l: 14px;
+  --ui-radius-m: 10px;
+  --ui-radius-s: 7px;
+  --ui-shadow: 0 18px 44px rgba(0, 0, 0, 0.48);
+  --ui-surface-bottom: rgba(8, 11, 20, 0.95);
+  --ui-surface-top: rgba(22, 30, 50, 0.94);
+  --ui-text-2: rgba(255, 255, 255, 0.8);
+  --ui-text-3: rgba(255, 255, 255, 0.58);
+  --font-display: "AuroraSans", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-ui: "AuroraSans", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+body, button, kbd, .btn, .screen {
+  font-family: var(--font-ui);
+}
+.screen {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- one card surface everywhere (amber hairline on top) */
+.screen-card,
+.logbook-card,
+.mission-detail,
+.briefing-chart-card,
+.briefing-info,
+.pause-panel {
+  background: linear-gradient(180deg, var(--ui-surface-top) 0%, var(--ui-surface-bottom) 100%);
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-l);
+  box-shadow: inset 0 2px 0 var(--ui-accent-line), inset 0 3px 0 rgba(255, 255, 255, 0.05), var(--ui-shadow);
+}
+
+.ui-tile {
+  border-color: var(--ui-line);
+  border-radius: var(--ui-radius-m);
+}
+.ui-tile-value {
+  font-size: 19px;
+  letter-spacing: 0.01em;
+}
+.ui-chip {
+  border-color: var(--ui-line-strong);
+}
+
+/* ---------- buttons: content-sized rich buttons, one height scale */
+.btn {
+  border-color: var(--ui-line-strong);
+  border-radius: var(--ui-radius-m);
+}
+.btn-label {
+  white-space: nowrap;
+}
+.btn-rich {
+  width: auto;
+  min-width: 200px;
+  min-height: 48px;
+}
+.btn-rich.btn-small {
+  min-width: 0;
+  min-height: 40px;
+}
+.btn-menu {
+  width: 440px;
+  min-height: 64px;
+}
+.btn-wide,
+.detail-go {
+  width: 100%;
+}
+.briefing-info .btn-row .btn {
+  width: auto;
+  min-width: 210px;
+}
+
+.btn:focus-visible,
+.mission-row:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(255, 209, 102, 0.18), 0 0 20px rgba(255, 209, 102, 0.3);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+.btn-menu:active:not(:disabled) {
+  transform: translateX(8px) scale(0.99);
+}
+
+.btn:disabled,
+.btn:disabled:hover {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 8px, rgba(255, 255, 255, 0.02) 8px 16px),
+    linear-gradient(180deg, rgba(30, 36, 50, 0.92), rgba(14, 17, 26, 0.92));
+  border-color: var(--ui-line);
+  box-shadow: none;
+  color: var(--ui-text-3);
+  cursor: not-allowed;
+  opacity: 1;
+}
+.btn:disabled .btn-icon {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ui-text-3);
+}
+.btn:disabled .btn-key {
+  opacity: 0.4;
+}
+
+/* The title screen's primary action breathes so the eye lands on
+   it first. */
+#screen-title .btn-primary {
+  animation: primary-breathe 2.6s ease-in-out infinite;
+}
+@keyframes primary-breathe {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 6px 18px rgba(201, 58, 54, 0.35); }
+  50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 6px 26px rgba(255, 120, 90, 0.6); }
+}
+
+.keycap,
+.btn-key {
+  height: 22px;
+  min-width: 24px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- screen top bar (built by hud.js addScreenChrome) */
+.screen-topbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 46px;
+  padding: 0 28px;
+  background: linear-gradient(180deg, rgba(6, 9, 16, 0.88) 0%, rgba(6, 9, 16, 0.5) 100%);
+  border-bottom: 1px solid rgba(255, 209, 102, 0.2);
+  pointer-events: none;
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topbar-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: radial-gradient(circle at 40% 35%, #FFF0C2, #FFD166 55%, #FF9E64);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(255, 158, 100, 0.55);
+  color: #0A0E18;
+}
+.topbar-word {
+  color: var(--cream);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.26em;
+}
+.topbar-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 18px;
+  border-left: 1px solid var(--ui-line);
+}
+.topbar-crumb {
+  color: var(--ui-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+.topbar-crumb.current {
+  color: var(--amber);
+}
+.topbar-sep {
+  color: var(--ui-text-3);
+  font-size: 13px;
+}
+.topbar-status {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---------- title */
+#screen-title {
+  background:
+    linear-gradient(90deg, rgba(6, 9, 16, 0.84) 0%, rgba(6, 9, 16, 0.52) 50%, rgba(6, 9, 16, 0.24) 100%),
+    radial-gradient(ellipse 70% 55% at 30% 112%, rgba(255, 158, 100, 0.3) 0%, rgba(255, 158, 100, 0) 70%);
+}
+#screen-title.visible {
+  padding: 34px 72px 78px 72px;
+  grid-template-columns: 1fr 372px;
+  column-gap: 56px;
+}
+#screen-title .screen-title-display {
+  font-size: 74px;
+  letter-spacing: 0.07em;
+  line-height: 1.02;
+}
+#screen-title .screen-subtitle {
+  color: var(--ui-text-2);
+  font-size: 19px;
+}
+.title-kicker {
+  font-size: 11.5px;
+  letter-spacing: 0.3em;
+}
+.title-emblem-stage {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 4px;
+}
+#screen-title .title-emblem-stage .title-emblem {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin: 0;
+}
+.title-rays {
+  position: absolute;
+  inset: -70px;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 209, 102, 0.16) 0deg 5deg, rgba(255, 209, 102, 0) 5deg 15deg);
+  border-radius: 50%;
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 68%);
+  animation: rays-spin 80s linear infinite;
+  pointer-events: none;
+}
+@keyframes rays-spin {
+  to { transform: rotate(360deg); }
+}
+.logbook-card {
+  gap: 13px;
+  padding: 18px 20px;
+}
+.title-footer {
+  align-items: center;
+}
+.title-footer-spacer {
+  flex: 1 1 auto;
+}
+.title-footer-hint {
+  color: var(--ui-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  white-space: pre;
+}
+
+/* ---------- mission select (height budget: 58 top + 63 header +
+   524 body + 32 hint + 18 bottom = 695) */
+#screen-missions.visible {
+  padding: 58px 28px 18px 28px;
+}
+.missions-header {
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 10px;
+}
+.missions-heading .screen-heading {
+  font-size: 30px;
+  line-height: 1.15;
+}
+.missions-subheading {
+  color: var(--ui-text-3);
+  font-size: 13px;
+}
+.missions-progress-box {
+  width: 260px;
+  margin-left: auto;
+}
+.missions-actions {
+  display: flex;
+  gap: 10px;
+}
+.missions-actions .btn {
+  margin: 0;
+}
+.missions-body {
+  grid-template-columns: 470px 1fr;
+}
+.mission-row {
+  border-color: var(--ui-line);
+}
+.mission-row::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  right: 0;
+  bottom: 9px;
+  width: 2px;
+  background: var(--type-hue, var(--amber));
+  border-radius: 2px;
+  opacity: 0.55;
+}
+.mission-row-title {
+  font-size: 14.5px;
+}
+.mission-row-goal {
+  color: var(--ui-text-3);
+}
+.mission-row.locked .mission-row-goal {
+  font-style: italic;
+}
+.mission-detail {
+  grid-template-columns: 360px 1fr;
+  padding: 14px;
+}
+.detail-info {
+  gap: 9px;
+  min-height: 300px;
+}
+.detail-title {
+  font-size: 26px;
+}
+.detail-goal {
+  color: var(--ui-text-2);
+  font-size: 14.5px;
+}
+.missions-hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--ui-text-3);
+  font-size: 12px;
+}
+.missions-hint span {
+  margin-right: 10px;
+}
+
+/* ---------- briefing (height budget: 58 + ~520 + 20 = 598) */
+#screen-briefing.visible {
+  padding: 58px 32px 20px 32px;
+}
+.briefing-layout {
+  grid-template-columns: 556px 600px;
+}
+.briefing-title {
+  font-size: 36px;
+}
+.briefing-info .briefing-body {
+  color: var(--ui-text-2);
+  font-size: 15px;
+}
+
+/* ---------- pause */
+.pause-keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ui-line);
+  color: var(--ui-text-3);
+  font-size: 12px;
+}
+.pause-keys span {
+  margin-right: 10px;
+}
+.pause-keys span:last-child {
+  margin-right: 0;
+}
+
+/* ---------- debrief (height budget: 58 + 58 heading + ~400 +
+   60 buttons + 18 = 594) */
+#screen-debrief.visible {
+  padding: 58px 32px 18px 32px;
+}
+#screen-debrief .screen-heading {
+  margin-bottom: 8px;
+  font-size: 40px;
+}
+.debrief-card {
+  gap: 10px;
+  padding: 18px 22px;
+}
+.stat-table-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 20px;
+  row-gap: 0;
+}
+.stat-table-2col .stat-row {
+  padding: 4px 6px;
+}
+.stat-table-2col .stat-row-label,
+.stat-table-2col .stat-row-value {
+  font-size: 14.5px;
+}
+.debrief-flight .ui-tile {
+  padding: 6px 10px;
+}
+.debrief-flight .ui-tile-value {
+  font-size: 17px;
+}
+.debrief-total {
+  margin-top: 2px;
+}
+
+/* ---------- crashed */
+#screen-crashed .screen-heading {
+  margin-bottom: 10px;
+}
+.crash-card {
+  gap: 12px;
+  padding: 18px 24px;
+}
+
+/* ---------- campaign (height budget: 58 + 20 + 55 + 184 + 232 +
+   60 + 18 = 627) */
+#screen-campaign.visible {
+  padding: 58px 32px 18px 32px;
+}
+#screen-campaign .screen-heading {
+  margin-bottom: 6px;
+  font-size: 44px;
+}
+.campaign-medals {
+  margin: 2px 0 14px 0;
+}
+
+/* ---------- help (height budget: 58 + 42 heading + ~530 card +
+   54 back + 16 = 700; VD6-14 margin trim: card padding 16->12 with
+   tighter gaps so the BACK button clears the 720 edge with real
+   margin, verified live) */
+#screen-help.visible {
+  padding: 58px 24px 16px 24px;
+}
+#screen-help .screen-heading {
+  margin-bottom: 4px;
+  font-size: 30px;
+}
+#screen-help .screen-card-wide {
+  width: 1120px;
+  padding: 12px 24px;
+}
+#screen-help .screen-subtitle {
+  margin: 0 0 6px 0;
+  color: var(--ui-text-2);
+  font-size: 15px;
+}
+.help-steps {
+  margin-bottom: 6px;
+}
+.help-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+  column-count: auto;
+  align-items: start;
+}
+.help-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.help-group {
+  margin: 0;
+  padding: 6px 10px;
+}
+#screen-help .help-row {
+  min-height: 24px;
+  padding: 1px 4px;
+}
+.help-key .keycap {
+  height: 20px;
+  min-width: 20px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+#screen-help .help-action {
+  color: var(--ui-text-2);
+  font-size: 13.5px;
+}
+#screen-help .help-note {
+  margin: 8px 0 0 0;
+  color: var(--ui-text-3);
+  font-size: 13px;
+}
+.btn-help-back {
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-rays, #screen-title .btn-primary {
+    animation: none;
+  }
+}
+
+/* ---------- VD6-GRADE: cinematic grade + lens-flare presentation ----------
+   (V6-GRADE 2026-11-26. This section ONLY — no HUD/menu rule above is
+   edited. render.js tone mapping/exposure and lens-flare.js logic stay
+   with V6-WORLD-LOOK; the grade is CSS overlay only, zero extra WebGL
+   passes, SwiftShader-safe.)
+
+   #fx-grade sits between the WebGL canvas and #hud in DOM order, so the
+   grade can never darken DOM HUD text (legibility is structural), and
+   every layer below keeps the frame centre transparent so the cockpit
+   panel / HUD combiner in shot 2 is not washed out. Reference target:
+   chase-reference.jpg / tower-reference.jpg — deep violet zenith,
+   saturated orange horizon, warm haze, violet-brown floor shadows,
+   soft corner falloff. Layers, top first:
+     1. vignette — violet-black corners, clear centre;
+     2. warm haze wash — amber veil across the top third only;
+     3. violet floor tint — purple shadow lift along the bottom edge;
+     4. centre warmth — a whisper of amber lift at mid-frame (the
+        S-curve "shoulder" feel; alphas kept low on purpose). */
+#fx-grade {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 95% 80% at 50% 42%,
+      rgba(16, 8, 24, 0) 48%,
+      rgba(16, 8, 24, 0.18) 75%,
+      rgba(12, 6, 20, 0.34) 100%),
+    linear-gradient(180deg,
+      rgba(255, 158, 100, 0.10) 0%,
+      rgba(255, 158, 100, 0.04) 18%,
+      rgba(255, 158, 100, 0) 38%),
+    linear-gradient(0deg,
+      rgba(96, 62, 140, 0.09) 0%,
+      rgba(96, 62, 140, 0.03) 14%,
+      rgba(96, 62, 140, 0) 30%),
+    radial-gradient(ellipse 70% 55% at 50% 45%,
+      rgba(255, 196, 128, 0.055) 0%,
+      rgba(255, 196, 128, 0) 62%);
+}
+
+/* Lens flare (lens-flare.js builds the DOM; until now these elements had
+   no styles at all, so the flare never rendered). Presentation only —
+   positions/opacity remain lens-flare.js's. Dawn palette: amber glow,
+   soft anamorphic streak, warm ghosts (colours per-ghost via --flare-rgb
+   set in lens-flare.js). Sits first inside #hud-stage, under all panels. */
+#hud-lens-flare {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.flare-glow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 460px;
+  height: 460px;
+  margin: -230px 0 0 -230px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 216, 130, 0.50) 0%,
+    rgba(255, 178, 112, 0.30) 32%,
+    rgba(255, 150, 96, 0.12) 55%,
+    rgba(255, 140, 90, 0) 72%);
+}
+
+.flare-streak {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 680px;
+  height: 3px;
+  margin: -1.5px 0 0 -340px;
+  border-radius: 2px;
+  background: linear-gradient(90deg,
+    rgba(255, 196, 128, 0) 0%,
+    rgba(255, 196, 128, 0.38) 38%,
+    rgba(255, 222, 160, 0.55) 50%,
+    rgba(255, 196, 128, 0.38) 62%,
+    rgba(255, 196, 128, 0) 100%);
+  box-shadow: 0 0 14px 3px rgba(255, 170, 100, 0.28);
+}
+
+.flare-ghost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(var(--flare-rgb, 255, 209, 102), 0.55) 0%,
+    rgba(var(--flare-rgb, 255, 209, 102), 0.18) 55%,
+    rgba(var(--flare-rgb, 255, 209, 102), 0) 72%);
+}
+
+.flare-ring {
+  background: radial-gradient(circle,
+    rgba(var(--flare-rgb, 255, 209, 102), 0) 58%,
+    rgba(var(--flare-rgb, 255, 209, 102), 0.45) 70%,
+    rgba(var(--flare-rgb, 255, 209, 102), 0) 82%);
+}
