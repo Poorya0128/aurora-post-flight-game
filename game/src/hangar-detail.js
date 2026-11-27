@@ -1,8 +1,11 @@
 // hangar-detail.js — V6-HANGAR realism pass (VD6-HANGAR).
 // One job: replace the flat vertex-coloured home hangar with a detailed
-// wooden barn hangar matching tower-reference.jpg — plank walls, corrugated
-// metal roof, open sliding doors with a dark furnished interior, lean-to,
-// plus airfield props (crates, fuel drums, fences, shed, windsock).
+// corrugated-metal hangar matching env6 (runway approach) — weathered
+// grey ribbed metal walls with rust streaks + roughness variation,
+// corrugated metal roof with overhang + fascia, glass ridge cupola,
+// framed windows, open sliding doors with a dark furnished interior,
+// lean-to office annex, plus airfield props (crates, fuel drums,
+// fences, shed, windsock). Timber is kept for posts/fences/shed.
 // Everything is code-generated (canvas textures + merged/instanced
 // geometry, no assets). Visual only: nothing here is collidable, scored or
 // read by flight.js / missions.js. The old world.js hangar subgroup is
@@ -244,6 +247,128 @@ function makeCorrugatedTexture() {
   }, true);
 }
 
+// Weathered corrugated metal WALLS (env6): vertical ribs with
+// highlight/shadow, horizontal panel seams + screws, rust streaks
+// weeping from seams, grime at the base. 1024x512.
+function makeMetalWallTexture() {
+  return canvasTexture(1024, 512, (ctx, w, h) => {
+    const rand = seededRandom(2718);
+    ctx.fillStyle = '#9AA3A8';
+    ctx.fillRect(0, 0, w, h);
+    const ribs = 32;
+    const ribW = w / ribs;
+    for (let i = 0; i < ribs; i++) {
+      const x = i * ribW;
+      const tone = 0.9 + rand() * 0.2;
+      const grad = ctx.createLinearGradient(x, 0, x + ribW, 0);
+      grad.addColorStop(0, 'rgb(' + Math.round(104 * tone) + ',' + Math.round(112 * tone) + ',' + Math.round(118 * tone) + ')');
+      grad.addColorStop(0.35, 'rgb(' + Math.round(168 * tone) + ',' + Math.round(176 * tone) + ',' + Math.round(182 * tone) + ')');
+      grad.addColorStop(0.55, 'rgb(' + Math.round(196 * tone) + ',' + Math.round(204 * tone) + ',' + Math.round(210 * tone) + ')');
+      grad.addColorStop(0.8, 'rgb(' + Math.round(122 * tone) + ',' + Math.round(130 * tone) + ',' + Math.round(136 * tone) + ')');
+      grad.addColorStop(1, 'rgb(' + Math.round(90 * tone) + ',' + Math.round(97 * tone) + ',' + Math.round(103 * tone) + ')');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, 0, ribW, h);
+    }
+    // Panel seams + screw rows.
+    for (const sy of [h * 0.34, h * 0.67]) {
+      ctx.fillStyle = 'rgba(40,44,48,0.6)';
+      ctx.fillRect(0, sy, w, 3);
+      ctx.fillStyle = 'rgba(230,236,240,0.35)';
+      ctx.fillRect(0, sy + 3, w, 2);
+      ctx.fillStyle = 'rgba(52,56,60,0.9)';
+      for (let x = ribW / 2; x < w; x += ribW * 2) {
+        ctx.beginPath();
+        ctx.arc(x, sy - 9, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        // rust weep under each screw
+        ctx.fillStyle = 'rgba(146,84,44,0.28)';
+        ctx.fillRect(x - 2, sy - 6, 4, 26 + rand() * 40);
+        ctx.fillStyle = 'rgba(52,56,60,0.9)';
+      }
+    }
+    // Rust streaks + grime blotches.
+    for (let i = 0; i < 64; i++) {
+      const x = rand() * w;
+      const y = rand() * h * 0.7;
+      ctx.fillStyle = 'rgba(146,84,44,' + (0.05 + rand() * 0.14).toFixed(2) + ')';
+      ctx.fillRect(x, y, 2 + rand() * 7, 30 + rand() * 180);
+    }
+    for (let i = 0; i < 34; i++) {
+      ctx.fillStyle = 'rgba(58,56,50,' + (0.04 + rand() * 0.09).toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.ellipse(rand() * w, rand() * h, 16 + rand() * 60, 9 + rand() * 26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const grime = ctx.createLinearGradient(0, h * 0.82, 0, h);
+    grime.addColorStop(0, 'rgba(44,40,34,0)');
+    grime.addColorStop(1, 'rgba(44,40,34,0.45)');
+    ctx.fillStyle = grime;
+    ctx.fillRect(0, h * 0.82, w, h * 0.18);
+  }, true);
+}
+
+// Roughness companion for the metal walls: clean galvanised ribs are
+// smoother (darker), rust/grime rougher (brighter). 512x256 greyscale.
+function makeMetalRoughnessTexture() {
+  const texture = canvasTexture(512, 256, (ctx, w, h) => {
+    const rand = seededRandom(1618);
+    ctx.fillStyle = '#8C8C8C';
+    ctx.fillRect(0, 0, w, h);
+    const ribs = 16;
+    const ribW = w / ribs;
+    for (let i = 0; i < ribs; i++) {
+      const grad = ctx.createLinearGradient(i * ribW, 0, (i + 1) * ribW, 0);
+      grad.addColorStop(0, '#9A9A9A');
+      grad.addColorStop(0.5, '#6E6E6E');
+      grad.addColorStop(1, '#9A9A9A');
+      ctx.fillStyle = grad;
+      ctx.fillRect(i * ribW, 0, ribW, h);
+    }
+    for (let i = 0; i < 90; i++) {
+      ctx.fillStyle = 'rgba(235,235,235,' + (0.1 + rand() * 0.25).toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.ellipse(rand() * w, rand() * h, 8 + rand() * 40, 5 + rand() * 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const grime = ctx.createLinearGradient(0, h * 0.8, 0, h);
+    grime.addColorStop(0, 'rgba(240,240,240,0)');
+    grime.addColorStop(1, 'rgba(240,240,240,0.7)');
+    ctx.fillStyle = grime;
+    ctx.fillRect(0, h * 0.8, w, h * 0.2);
+  }, true);
+  if (texture) texture.colorSpace = THREE.NoColorSpace;
+  return texture;
+}
+
+// Hangar name board above the sliding doors.
+function makeHangarSignTexture() {
+  return canvasTexture(512, 96, (ctx, w, h) => {
+    ctx.fillStyle = '#232A33';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#F2EDE4';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(6, 6, w - 12, h - 12);
+    ctx.fillStyle = '#F2EDE4';
+    ctx.font = '800 44px "Segoe UI", system-ui, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('AURORA POST', w / 2, h / 2 + 2);
+  }, false);
+}
+
+// Soft dark radial disc for baked contact AO under the hangar.
+function makeAODiscTexture() {
+  return canvasTexture(128, 128, (ctx, w, h) => {
+    const grad = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
+    grad.addColorStop(0, 'rgba(14,9,6,0.85)');
+    grad.addColorStop(0.55, 'rgba(14,9,6,0.5)');
+    grad.addColorStop(0.85, 'rgba(14,9,6,0.18)');
+    grad.addColorStop(1, 'rgba(14,9,6,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  }, false);
+}
+
 // Crate face: pale wood, battens, stencil labels.
 function makeCrateTexture() {
   return canvasTexture(256, 256, (ctx, w, h) => {
@@ -386,27 +511,37 @@ function buildHangarDetail(scene, world, renderer) {
   const plankMaterial = new THREE.MeshStandardMaterial({
     map: plankTexture, roughness: 0.88, metalness: 0.0,
   });
+  const metalWallTexture = makeMetalWallTexture();
+  const metalRoughnessTexture = makeMetalRoughnessTexture();
+  const metalWallMaterial = new THREE.MeshStandardMaterial({
+    map: metalWallTexture, roughness: 0.85, metalness: 0.55,
+  });
+  if (metalRoughnessTexture) metalWallMaterial.roughnessMap = metalRoughnessTexture;
   const roofMaterial = new THREE.MeshStandardMaterial({
     map: roofTexture, roughness: 0.38, metalness: 0.85, side: THREE.DoubleSide,
   });
 
-  // ---- plank geometry: walls, gables, doors, posts, lean-to, shed, fences
+  // ---- geometry: metal walls/gables/doors + timber posts/fences/shed
   const plankParts = [];
+  const metalParts = [];
   const plankScale = 0.16; // texture tiles ~ every 6 m of wall
   const wall = (w, h, x, y, z, ry) => {
     plankParts.push(scaleUV(plane(w, h, x, y, z, ry), w * plankScale, h * plankScale));
   };
+  const metalWall = (w, h, x, y, z, ry) => {
+    metalParts.push(scaleUV(plane(w, h, x, y, z, ry), w * plankScale, h * plankScale));
+  };
   // South wall (full) + north wall segments around the door opening.
-  wall(HALF_W * 2, WALL_H, 0, WALL_H / 2, HALF_D, 0);
+  metalWall(HALF_W * 2, WALL_H, 0, WALL_H / 2, HALF_D, 0);
   const segW = HALF_W - DOOR_W / 2;
-  wall(segW, WALL_H, -(DOOR_W / 2 + segW / 2), WALL_H / 2, -HALF_D, Math.PI);
-  wall(segW, WALL_H, DOOR_W / 2 + segW / 2, WALL_H / 2, -HALF_D, Math.PI);
-  wall(DOOR_W, WALL_H - DOOR_H, 0, DOOR_H + (WALL_H - DOOR_H) / 2, -HALF_D, Math.PI);
+  metalWall(segW, WALL_H, -(DOOR_W / 2 + segW / 2), WALL_H / 2, -HALF_D, Math.PI);
+  metalWall(segW, WALL_H, DOOR_W / 2 + segW / 2, WALL_H / 2, -HALF_D, Math.PI);
+  metalWall(DOOR_W, WALL_H - DOOR_H, 0, DOOR_H + (WALL_H - DOOR_H) / 2, -HALF_D, Math.PI);
   // East / west walls + gables.
-  wall(HALF_D * 2, WALL_H, HALF_W, WALL_H / 2, 0, Math.PI / 2);
-  wall(HALF_D * 2, WALL_H, -HALF_W, WALL_H / 2, 0, -Math.PI / 2);
-  plankParts.push(gableTriangle(HALF_D, WALL_H, ROOF_RISE, HALF_W, false));
-  plankParts.push(gableTriangle(HALF_D, WALL_H, ROOF_RISE, -HALF_W, true));
+  metalWall(HALF_D * 2, WALL_H, HALF_W, WALL_H / 2, 0, Math.PI / 2);
+  metalWall(HALF_D * 2, WALL_H, -HALF_W, WALL_H / 2, 0, -Math.PI / 2);
+  metalParts.push(gableTriangle(HALF_D, WALL_H, ROOF_RISE, HALF_W, false));
+  metalParts.push(gableTriangle(HALF_D, WALL_H, ROOF_RISE, -HALF_W, true));
   // Corner posts + door frame + sliding rail.
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
@@ -435,8 +570,8 @@ function buildHangarDetail(scene, world, renderer) {
     merged.translate(cx, 0, -HALF_D - 0.28);
     return merged;
   };
-  plankParts.push(doorPanel(-(DOOR_W / 2 + 3.1), 0.06));
-  plankParts.push(doorPanel(DOOR_W / 2 + 3.1, -0.16));
+  metalParts.push(doorPanel(-(DOOR_W / 2 + 3.1), 0.06));
+  metalParts.push(doorPanel(DOOR_W / 2 + 3.1, -0.16));
   // Personnel door (east wall) + small window frames.
   plankParts.push(scaleUV(box(0.12, 2.2, 1.0, HALF_W + 0.05, 1.1, 3.4), 0.3, 1));
   // Lean-to on the east side: posts + back beam (roof in roof geometry).
@@ -479,6 +614,12 @@ function buildHangarDetail(scene, world, renderer) {
   plankMesh.castShadow = true;
   plankMesh.receiveShadow = true;
   group.add(plankMesh);
+
+  const metalMesh = new THREE.Mesh(mergeGeometries(metalParts), metalWallMaterial);
+  metalMesh.name = 'hangar-metal-walls';
+  metalMesh.castShadow = true;
+  metalMesh.receiveShadow = true;
+  group.add(metalMesh);
 
   // ---- roof geometry: two slopes + ridge + lean-to + shed roofs
   // Clean construction: lay the plane flat (rotateX -90deg, normal +Y,
@@ -575,6 +716,20 @@ function buildHangarDetail(scene, world, renderer) {
   }
   // lamp cord from the ridge beam
   propParts.push({ geometry: box(0.05, 1.9, 0.05, 0, 4.9, -4.4), color: 0x1c1c1e });
+  // Framed windows on the south wall (one warm-lit) + eave fascia.
+  for (const wx of [-6, 0, 6]) {
+    propParts.push({ geometry: box(1.5, 1.1, 0.1, wx, 3.3, HALF_D + 0.06), color: wx === 0 ? 0xffd9a0 : 0x1a2634 });
+    propParts.push({ geometry: box(1.7, 0.14, 0.12, wx, 3.92, HALF_D + 0.07), color: 0xf2ede4 });
+    propParts.push({ geometry: box(1.7, 0.14, 0.12, wx, 2.68, HALF_D + 0.07), color: 0xf2ede4 });
+    propParts.push({ geometry: box(0.07, 1.1, 0.11, wx, 3.3, HALF_D + 0.08), color: 0xf2ede4 });
+    propParts.push({ geometry: box(1.5, 0.07, 0.11, wx, 3.3, HALF_D + 0.08), color: 0xf2ede4 });
+  }
+  for (const sz of [-1, 1]) {
+    propParts.push({ geometry: box(HALF_W * 2 + 1.2, 0.3, 0.12, 0, WALL_H + 0.05, sz * (HALF_D + 0.62)), color: 0xf2ede4 });
+  }
+  // Office-annex door + window on the east wall under the lean-to.
+  propParts.push({ geometry: box(0.12, 2.1, 1.0, HALF_W + 0.06, 1.05, -2.5), color: 0x1a2634 });
+  propParts.push({ geometry: box(0.1, 0.9, 1.1, HALF_W + 0.06, 2.2, 1.8), color: 0xffd9a0 });
   // exterior: pallet stacks + logs by the shed, chocks by the doors
   inCrate(-HALF_W - 4.2, 0.6, -1.5, 1.2, 0.3);
   inCrate(-HALF_W - 4.0, 1.75, -1.4, 1.1, -0.2);
@@ -595,6 +750,60 @@ function buildHangarDetail(scene, world, renderer) {
   propsMesh.castShadow = true;
   propsMesh.receiveShadow = true;
   group.add(propsMesh);
+
+  // Glass ridge cupola (env6): dark frame + warm glass band + cap.
+  const cupola = new THREE.Group();
+  cupola.name = 'hangar-cupola';
+  const cupolaBase = new THREE.Mesh(
+    new THREE.BoxGeometry(3.4, 0.4, 2.4),
+    new THREE.MeshStandardMaterial({ color: 0x3a3f44, roughness: 0.6, metalness: 0.4 }),
+  );
+  cupolaBase.position.y = WALL_H + ROOF_RISE + 0.15;
+  cupolaBase.castShadow = true;
+  cupola.add(cupolaBase);
+  const cupolaGlass = new THREE.Mesh(
+    new THREE.BoxGeometry(3.0, 1.1, 2.0),
+    new THREE.MeshStandardMaterial({
+      color: 0x33434e, emissive: 0xffb45e, emissiveIntensity: 0.9,
+      roughness: 0.22, metalness: 0.15,
+    }),
+  );
+  cupolaGlass.position.y = WALL_H + ROOF_RISE + 0.9;
+  cupola.add(cupolaGlass);
+  const cupolaCap = new THREE.Mesh(
+    new THREE.ConeGeometry(2.2, 0.9, 4),
+    new THREE.MeshStandardMaterial({ color: 0x2e3236, roughness: 0.5, metalness: 0.5, flatShading: true }),
+  );
+  cupolaCap.rotation.y = Math.PI / 4;
+  cupolaCap.scale.set(1.15, 1, 0.8);
+  cupolaCap.position.y = WALL_H + ROOF_RISE + 1.9;
+  cupolaCap.castShadow = true;
+  cupola.add(cupolaCap);
+  group.add(cupola);
+
+  // Name board above the sliding doors (north face).
+  const signTexture = makeHangarSignTexture();
+  const signMaterial = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.2 });
+  if (signTexture) signMaterial.map = signTexture;
+  else signMaterial.color.setHex(0x232a33);
+  const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.2), signMaterial);
+  signMesh.position.set(0, DOOR_H + 1.0, -HALF_D - 0.12);
+  signMesh.rotation.y = Math.PI;
+  group.add(signMesh);
+
+  // Baked AO disc grounding the hangar footprint.
+  const aoTexture = makeAODiscTexture();
+  const aoMaterial = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.42, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  if (aoTexture) aoMaterial.map = aoTexture;
+  const aoGeo = new THREE.PlaneGeometry(26, 19);
+  aoGeo.rotateX(-Math.PI / 2);
+  const aoMesh = new THREE.Mesh(aoGeo, aoMaterial);
+  aoMesh.position.y = 0.07;
+  aoMesh.renderOrder = 1;
+  group.add(aoMesh);
 
   // ---- hanging lamp: glow sprite + warm point light inside the doors
   const lampSprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -669,10 +878,11 @@ function buildHangarDetail(scene, world, renderer) {
   sockPivot.position.set(HALF_W + 6.5, 6.3, -HALF_D - 4);
   const sockGeometry = new THREE.CylinderGeometry(0.14, 0.48, 2.3, 8, 1, true);
   const sockColors = new Float32Array(sockGeometry.attributes.position.count * 3);
-  const sockOrange = new THREE.Color(0xe88b4a);
-  const sockWhite = new THREE.Color(0xf2ede4);
+  const sockOrange = new THREE.Color(0xf07830);
+  const sockWhite = new THREE.Color(0xffffff);
   for (let i = 0; i < sockGeometry.attributes.position.count; i++) {
-    const band = sockGeometry.attributes.position.getY(i) > 0.1 ? sockWhite : sockOrange;
+    const sy = sockGeometry.attributes.position.getY(i);
+    const band = sy > 0.55 ? sockOrange : (sy > -0.35 ? sockWhite : sockOrange);
     sockColors[i * 3] = band.r;
     sockColors[i * 3 + 1] = band.g;
     sockColors[i * 3 + 2] = band.b;
@@ -684,6 +894,22 @@ function buildHangarDetail(scene, world, renderer) {
   sock.position.y = -1.15;
   sockPivot.add(sock);
   group.add(sockPivot);
+  // Small lamp on the windsock pole (emissive head + glow sprite).
+  const poleLamp = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 8, 6),
+    new THREE.MeshStandardMaterial({
+      color: 0x442f16, emissive: 0xffc98a, emissiveIntensity: 1.9, roughness: 0.4,
+    }),
+  );
+  poleLamp.position.set(HALF_W + 6.5, 5.6, -HALF_D - 4);
+  group.add(poleLamp);
+  const poleLampGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture(), color: 0xffc98a, blending: THREE.AdditiveBlending,
+    depthWrite: false, transparent: true, opacity: 0.7,
+  }));
+  poleLampGlow.position.copy(poleLamp.position);
+  poleLampGlow.scale.set(2.6, 2.6, 1);
+  group.add(poleLampGlow);
 
   if (scene) scene.add(group);
   if (typeof window !== 'undefined') window.__hangarDebug = { group, scene };

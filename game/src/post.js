@@ -10,10 +10,12 @@
 //      threshold on linear HDR luminance)
 //   3. downsample -> quarter res, separable 9-tap Gaussian blur there
 //   4. downsample -> eighth res, blur again (wide halo tier)
-//   5. composite to screen: scene + (quarter + eighth) * strength,
-//      then the same ACES filmic curve + exposure the renderer uses
-//      for direct renders, then linear -> sRGB. A whisper of
-//      vignette finishes the cinematic grade.
+//   5. composite: scene + (quarter + eighth) * strength, then the
+//      same ACES filmic curve + exposure the renderer uses for
+//      direct renders, a subtle warm grade (warm highlights, cool
+//      shadows) and a whisper of vignette. Output stays linear.
+//   6. FXAA to screen (owns linear -> sRGB). LOW quality skips
+//      steps 2-4 entirely (no bloom).
 // (VD6-POST perf tune: blur tiers sit at quarter/eighth res, not
 // half/quarter — SwiftShader A/B showed the half-res blur pair cost
 // ~1/3 more frame time for a barely tighter halo; the concept glow
@@ -47,6 +49,7 @@
 // }
 
 import * as THREE from 'three';
+import { isLow } from './quality.js'; // visual upgrade: LOW skips bloom passes
 
 // ---------------------------------------------------------------------------
 // Shaders
@@ -124,10 +127,13 @@ const DOWNSAMPLE_FRAGMENT = [
 ].join('\n');
 
 // Composite: add bloom in linear HDR, ACES (three's exact fit), then
-// linearToOutputTexel (three's injected sRGB converter). Function
-// names are post-prefixed: three's fragment prefix already defines
-// ACESFilmicToneMapping / RRTAndODTFit when rendering to screen, and
-// a duplicate definition would fail shader compilation.
+// a subtle warm grade (warm highlights, slightly cool shadows) and
+// vignette. Output stays LINEAR — the final FXAA pass owns the sRGB
+// conversion (linearToOutputTexel) so the intermediate graded target
+// never double-converts. Function names are post-prefixed: three's
+// fragment prefix already defines ACESFilmicToneMapping /
+// RRTAndODTFit when rendering to screen, and a duplicate definition
+// would fail shader compilation.
 const COMPOSITE_FRAGMENT = [
   'uniform sampler2D tScene;',
   'uniform sampler2D tBloomNear;',
@@ -162,9 +168,60 @@ const COMPOSITE_FRAGMENT = [
   '             + texture2D(tBloomFar, vUv).rgb * 1.0;',
   '  colour += bloom * uStrength;',
   '  colour = postACES(colour);',
+  // Subtle warm grade: highlights lean warm gold, shadows lean
+  // slightly cool violet-blue (golden-hour split tone, references).
+  '  float gradeLum = dot(colour, vec3(0.2126, 0.7152, 0.0722));',
+  '  vec3 warmTint = vec3(1.06, 1.0, 0.92);',
+  '  vec3 coolTint = vec3(0.94, 0.98, 1.08);',
+  '  colour *= mix(coolTint, warmTint, smoothstep(0.15, 0.75, gradeLum));',
   '  vec2 centred = vUv - 0.5;',
   '  float vignette = 1.0 - uVignette * dot(centred, centred) * 2.0;',
   '  colour *= clamp(vignette, 0.0, 1.0);',
+  '  gl_FragColor = vec4(colour, 1.0);', // linear; FXAA pass encodes sRGB
+  '}',
+].join('\n');
+
+// FXAA (lite, luma-based): final pass after composite. Works on the
+// linear graded buffer — luma is sqrt-compressed so edge thresholds
+// behave like the usual sRGB-tuned values — then applies three's
+// linearToOutputTexel for the screen. No chromatic aberration.
+const FXAA_FRAGMENT = [
+  'uniform sampler2D tSource;',
+  'uniform vec2 uTexel;',
+  'varying vec2 vUv;',
+  'float fxaaLuma(vec3 c) {',
+  '  return sqrt(max(dot(c, vec3(0.299, 0.587, 0.114)), 0.0));',
+  '}',
+  'void main() {',
+  '  vec3 rgbM = texture2D(tSource, vUv).rgb;',
+  '  vec3 rgbNW = texture2D(tSource, vUv + vec2(-1.0, -1.0) * uTexel).rgb;',
+  '  vec3 rgbNE = texture2D(tSource, vUv + vec2( 1.0, -1.0) * uTexel).rgb;',
+  '  vec3 rgbSW = texture2D(tSource, vUv + vec2(-1.0,  1.0) * uTexel).rgb;',
+  '  vec3 rgbSE = texture2D(tSource, vUv + vec2( 1.0,  1.0) * uTexel).rgb;',
+  '  float lumaM = fxaaLuma(rgbM);',
+  '  float lumaNW = fxaaLuma(rgbNW);',
+  '  float lumaNE = fxaaLuma(rgbNE);',
+  '  float lumaSW = fxaaLuma(rgbSW);',
+  '  float lumaSE = fxaaLuma(rgbSE);',
+  '  float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));',
+  '  float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));',
+  '  float lumaRange = lumaMax - lumaMin;',
+  '  if (lumaRange < max(0.0312, lumaMax * 0.125)) {',
+  '    gl_FragColor = linearToOutputTexel(vec4(rgbM, 1.0));',
+  '    return;',
+  '  }',
+  '  vec2 dir;',
+  '  dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));',
+  '  dir.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));',
+  '  float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);',
+  '  float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);',
+  '  dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * uTexel;',
+  '  vec3 rgbA = 0.5 * (texture2D(tSource, vUv + dir * (1.0 / 3.0 - 0.5)).rgb',
+  '                   + texture2D(tSource, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);',
+  '  vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tSource, vUv + dir * -0.5).rgb',
+  '                                 + texture2D(tSource, vUv + dir * 0.5).rgb);',
+  '  float lumaB = fxaaLuma(rgbB);',
+  '  vec3 colour = (lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB;',
   '  gl_FragColor = linearToOutputTexel(vec4(colour, 1.0));',
   '}',
 ].join('\n');
@@ -173,17 +230,15 @@ const COMPOSITE_FRAGMENT = [
 // Post chain
 // ---------------------------------------------------------------------------
 
-// Defaults tuned for the dawn scene: rings/lamps/sun sit at linear
-// luminance ~1.0-2.4 (emissiveIntensity 1.0-1.6, sun disc ~2.4), the
-// sky horizon sits below ~0.65. VD6-POST fix (user report 2026-11-27:
-// chase-view aircraft washed to a white ghost): threshold 0.85 -> 1.0
-// and strength 0.85 -> 0.60, plus a saturation gate in the bright-
-// pass — sun-lit cream paint is near-grey (low saturation) while
-// rings/sun/lamps are saturated, so the gate keeps paint out of the
-// bloom while emissives still glow.
-const DEFAULT_THRESHOLD = 1.0;
-const DEFAULT_KNEE = 0.3;
-const DEFAULT_STRENGTH = 0.6;
+// Defaults tuned for the golden-hour scene: bloom only on sun disc,
+// lamps and emissives (linear luminance >~1), never the whole frame.
+// Threshold 0.85 with a soft knee, strength 0.35 (gentle halo), plus
+// the saturation gate in the bright-pass — sun-lit cream paint is
+// near-grey (low saturation) while rings/sun/lamps are saturated, so
+// the gate keeps paint out of the bloom while emissives still glow.
+const DEFAULT_THRESHOLD = 0.85;
+const DEFAULT_KNEE = 0.25;
+const DEFAULT_STRENGTH = 0.35;
 // Kept faint: style.css #fx-grade already lays a CSS vignette over
 // the canvas, so the composite only adds a whisper of extra falloff.
 const DEFAULT_VIGNETTE = 0.08;
@@ -248,6 +303,7 @@ export function createPost(renderer) {
     quarterB: null,
     eighthA: null,
     eighthB: null,
+    gradedTarget: null,
     quadScene: null,
     quadCamera: null,
     quadMesh: null,
@@ -255,7 +311,12 @@ export function createPost(renderer) {
     blurMaterial: null,
     downsampleMaterial: null,
     compositeMaterial: null,
+    fxaaMaterial: null,
   };
+
+  // Quality is read at build time (quality.js contract): LOW skips
+  // the bloom passes entirely, keeping scene -> grade -> FXAA.
+  const lowQuality = isLow();
 
   const drawingSize = new THREE.Vector2();
 
@@ -303,6 +364,15 @@ export function createPost(renderer) {
       state.quarterB = makeTarget(quarterWidth, quarterHeight, targetType, 0);
       state.eighthA = makeTarget(eighthWidth, eighthHeight, targetType, 0);
       state.eighthB = makeTarget(eighthWidth, eighthHeight, targetType, 0);
+      // Full-res linear buffer between composite and FXAA.
+      state.gradedTarget = makeTarget(width, height, targetType, 0);
+      // Clear bloom targets once: on LOW they are never rendered into,
+      // and the composite still samples them (at strength 0).
+      for (const target of [state.quarterA, state.eighthA]) {
+        renderer.setRenderTarget(target);
+        renderer.clear();
+      }
+      renderer.setRenderTarget(null);
     } else {
       state.sceneTarget.setSize(width, height);
       state.halfA.setSize(halfWidth, halfHeight);
@@ -310,6 +380,7 @@ export function createPost(renderer) {
       state.quarterB.setSize(quarterWidth, quarterHeight);
       state.eighthA.setSize(eighthWidth, eighthHeight);
       state.eighthB.setSize(eighthWidth, eighthHeight);
+      state.gradedTarget.setSize(width, height);
     }
   }
 
@@ -340,44 +411,54 @@ export function createPost(renderer) {
     renderer.setRenderTarget(state.sceneTarget);
     renderer.render(scene, camera);
 
-    // 2) Bright-pass + downsample to half res.
-    const bright = state.brightMaterial.uniforms;
-    bright.tScene.value = state.sceneTarget.texture;
-    bright.uTexel.value.set(1 / state.width, 1 / state.height);
-    runPass(state.brightMaterial, state.halfA);
+    if (!lowQuality) {
+      // 2) Bright-pass + downsample to half res.
+      const bright = state.brightMaterial.uniforms;
+      bright.tScene.value = state.sceneTarget.texture;
+      bright.uTexel.value.set(1 / state.width, 1 / state.height);
+      runPass(state.brightMaterial, state.halfA);
 
-    // 3) Downsample to quarter res, separable blur there (A -> B -> A).
-    const down = state.downsampleMaterial.uniforms;
-    down.tSource.value = state.halfA.texture;
-    down.uTexel.value.set(halfTexelX, halfTexelY);
-    runPass(state.downsampleMaterial, state.quarterA);
-    const blur = state.blurMaterial.uniforms;
-    blur.tSource.value = state.quarterA.texture;
-    blur.uDirection.value.set(quarterTexelX, 0);
-    runPass(state.blurMaterial, state.quarterB);
-    blur.tSource.value = state.quarterB.texture;
-    blur.uDirection.value.set(0, quarterTexelY);
-    runPass(state.blurMaterial, state.quarterA);
+      // 3) Downsample to quarter res, separable blur there (A -> B -> A).
+      const down = state.downsampleMaterial.uniforms;
+      down.tSource.value = state.halfA.texture;
+      down.uTexel.value.set(halfTexelX, halfTexelY);
+      runPass(state.downsampleMaterial, state.quarterA);
+      const blur = state.blurMaterial.uniforms;
+      blur.tSource.value = state.quarterA.texture;
+      blur.uDirection.value.set(quarterTexelX, 0);
+      runPass(state.blurMaterial, state.quarterB);
+      blur.tSource.value = state.quarterB.texture;
+      blur.uDirection.value.set(0, quarterTexelY);
+      runPass(state.blurMaterial, state.quarterA);
 
-    // 4) Downsample to eighth res, blur again (wide halo tier).
-    down.tSource.value = state.quarterA.texture;
-    down.uTexel.value.set(quarterTexelX, quarterTexelY);
-    runPass(state.downsampleMaterial, state.eighthA);
-    blur.tSource.value = state.eighthA.texture;
-    blur.uDirection.value.set(eighthTexelX, 0);
-    runPass(state.blurMaterial, state.eighthB);
-    blur.tSource.value = state.eighthB.texture;
-    blur.uDirection.value.set(0, eighthTexelY);
-    runPass(state.blurMaterial, state.eighthA);
+      // 4) Downsample to eighth res, blur again (wide halo tier).
+      down.tSource.value = state.quarterA.texture;
+      down.uTexel.value.set(quarterTexelX, quarterTexelY);
+      runPass(state.downsampleMaterial, state.eighthA);
+      blur.tSource.value = state.eighthA.texture;
+      blur.uDirection.value.set(eighthTexelX, 0);
+      runPass(state.blurMaterial, state.eighthB);
+      blur.tSource.value = state.eighthB.texture;
+      blur.uDirection.value.set(0, eighthTexelY);
+      runPass(state.blurMaterial, state.eighthA);
+    }
+    // LOW: bloom passes skipped entirely; composite strength 0 below.
 
-    // 5) Composite to screen (ACES + sRGB + vignette).
+    // 5) Composite (ACES + warm grade + vignette) into the linear
+    // graded buffer.
     const composite = state.compositeMaterial.uniforms;
     composite.tScene.value = state.sceneTarget.texture;
     composite.tBloomNear.value = state.quarterA.texture;
     composite.tBloomFar.value = state.eighthA.texture;
-    composite.uStrength.value = api.strength;
+    composite.uStrength.value = lowQuality ? 0 : api.strength;
     composite.uExposure.value = renderer.toneMappingExposure || 1;
-    runPass(state.compositeMaterial, null);
+    runPass(state.compositeMaterial, state.gradedTarget);
+
+    // 6) FXAA to screen (owns the sRGB conversion).
+    const fxaa = state.fxaaMaterial.uniforms;
+    fxaa.tSource.value = state.gradedTarget.texture;
+    fxaa.uTexel.value.set(1 / state.width, 1 / state.height);
+    runPass(state.fxaaMaterial, null);
   }
 
   try {
@@ -429,8 +510,16 @@ export function createPost(renderer) {
         tBloomNear: { value: null },
         tBloomFar: { value: null },
         uStrength: { value: DEFAULT_STRENGTH },
-        uExposure: { value: 1.15 },
+        uExposure: { value: 0.9 },
         uVignette: { value: DEFAULT_VIGNETTE },
+      },
+    });
+    state.fxaaMaterial = new THREE.ShaderMaterial({
+      ...passDefaults,
+      fragmentShader: FXAA_FRAGMENT,
+      uniforms: {
+        tSource: { value: null },
+        uTexel: { value: new THREE.Vector2(1, 1) },
       },
     });
 

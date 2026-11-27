@@ -15,20 +15,25 @@ import { buildContactShadows, updateContactShadows, groundHeightAt } from './con
 import { buildVolumetricClouds, updateVolumetricClouds } from './clouds.js'; // VD6-CLOUDS hook
 import { enhanceSky, updateSkyExtras } from './sky.js'; // VD6-SKY hook (sky.js owns the sunset pass)
 import { applyLighting, updateLighting } from './lighting.js'; // VD6-LIGHT hook (V6-LIGHTING)
+import { isLow } from './quality.js'; // visual upgrade: LOW drops shadow res
 
-// ---- A8 palette (ui_spec.md §3.1/§3.2 — exact hexes, no ad-hoc colours) ----
+// ---- Golden-hour palette (user reference set env1–env9) ----
+// Deep blue-violet zenith melting through pale lavender-blue into a peach
+// horizon with warm gold at the sun; clouds cream-lit on top with
+// soft violet-grey bellies; fog tinted to the peach horizon so distant
+// islands haze into it.
 const PALETTE = {
-  skyZenith: 0x2b3a67,
-  skyMid: 0x7a5c8f,
-  skyHorizon: 0xff9e64,
-  sunDisc: 0xffd166,
-  sunLight: 0xffb27a,
-  ambient: 0x4a5a7a,
-  hemisphereSky: 0x7a5c8f,
-  hemisphereGround: 0x123c5a,
-  fog: 0xe8a07a,
-  cloudLit: 0xffc4a3,
-  cloudShadow: 0x5a4a6b,
+  skyZenith: 0x4b5cc4,
+  skyMid: 0xb8a9d9, // round 2: pale lavender-blue (was pink 0xd48bc4); == sky.js GOLDEN.rose
+  skyHorizon: 0xffb380,
+  sunDisc: 0xffe6a8,
+  sunLight: 0xffc07a,
+  ambient: 0x8a7fb8,
+  hemisphereSky: 0xa8a8d8, // round 2: synced to the desaturated lavender-blue mid (was 0xb89ad8)
+  hemisphereGround: 0x6b5a3a,
+  fog: 0xf5b88a,
+  cloudLit: 0xffe9c8,
+  cloudShadow: 0xb8a8d0,
 };
 
 // Dawn sun elevation, locked at 9 degrees (visual_spec §2.4 / VD-02):
@@ -92,7 +97,7 @@ const TOWER_SIDE_M = -13;
 const TOWER_CLEARANCE_M = 5; // height over the strip surface
 const CAMERA_MIN_GROUND_CLEARANCE = 2.5; // metres above terrain (design.md §4.3)
 const CAMERA_BLEND_SECONDS = 0.35;
-const SHADOW_MAP_RES = 4096; // shadow map edge length in texels
+const SHADOW_MAP_RES = isLow() ? 2048 : 4096; // shadow map edge (LOW halves it)
 
 // Reused scratch objects — no per-frame allocation in the camera path.
 const _desiredPosition = new THREE.Vector3();
@@ -138,7 +143,7 @@ export function createRenderer(canvas) {
   });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15; // locked with the 9-degree sun (VD-02); 1.3 blew out
+  renderer.toneMappingExposure = 0.9; // golden-hour grade (post.js reads this); sun/hemi/env retuned in lighting.js to stay bright
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // D-135: the 2048² shadow map re-renders only when the aircraft has
@@ -150,7 +155,10 @@ export function createRenderer(canvas) {
 
   const scene = new THREE.Scene();
   scene.userData.renderer = renderer; // updateSky flags shadow updates (D-135)
-  scene.fog = new THREE.Fog(PALETTE.fog, 800, 6000); // warm dawn haze (ui_spec §3.2)
+  // Peach FogExp2 haze: density 0.00016 gives ~21% fog at 3 km and
+  // ~60% at 6 km (factor = 1 - exp(-(d*density)^2)), so distant
+  // islands haze softly without vanishing inside the 12 km world.
+  scene.fog = new THREE.FogExp2(PALETTE.fog, 0.00016);
 
   const camera = new THREE.PerspectiveCamera(CHASE_FOV, 1, 0.1, 30000);
   camera.position.set(0, 30, 60);
@@ -219,16 +227,28 @@ function buildSkyDome() {
       'uniform vec3 sunColour;',
       'uniform vec3 sunDirection;',
       'varying vec3 vWorldDirection;',
+      'float skyHash(vec2 p) {',
+      '  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);',
+      '}',
       'void main() {',
-      '  float height = clamp(vWorldDirection.y, -1.0, 1.0);',
-      '  vec3 colour = mix(horizonColour, midColour, smoothstep(0.0, 0.22, height));',
-      '  colour = mix(colour, zenithColour, smoothstep(0.18, 0.65, height));',
-      '  colour = mix(colour, horizonColour * 0.55, smoothstep(0.0, -0.25, height));',
-      '  float sunAmount = max(dot(normalize(vWorldDirection), normalize(sunDirection)), 0.0);',
-      // VD6-LOOK: disc 1.15 → 1.35, glow 0.22 → 0.30 — the reference
-      // sun sits on the horizon as a bright disc in a wide warm halo.
-      '  colour += sunColour * pow(sunAmount, 220.0) * 1.35;', // tight sun disc
-      '  colour += sunColour * pow(sunAmount, 6.0) * 0.30;', // wide dawn halo
+      '  vec3 dir = normalize(vWorldDirection);',
+      '  vec3 sunDir = normalize(sunDirection);',
+      '  float height = clamp(dir.y, -1.0, 1.0);',
+      // Smooth golden-hour gradient: peach horizon -> pink-lavender
+      // mid -> soft blue-violet zenith (reference set env1-env9).
+      '  vec3 colour = horizonColour;',
+      '  colour = mix(colour, midColour, smoothstep(0.02, 0.30, height));',
+      '  colour = mix(colour, zenithColour, smoothstep(0.28, 0.75, height));',
+      '  colour = mix(colour, horizonColour * 0.6, smoothstep(0.0, -0.25, height));',
+      // Warm gold bloom toward the sun azimuth, hugging the horizon.
+      '  float azimuth = max(dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDir.x, 0.0, sunDir.z))), 0.0);',
+      '  float sunWarmth = pow(azimuth, 3.0) * (1.0 - smoothstep(0.0, 0.32, height));',
+      '  colour += sunColour * sunWarmth * 0.30;',
+      '  float sunAmount = max(dot(dir, sunDir), 0.0);',
+      '  colour += sunColour * pow(sunAmount, 350.0) * 1.6;', // sun disc
+      '  colour += sunColour * pow(sunAmount, 8.0) * 0.28;', // soft halo
+      // Ordered dither (+/- 1/255) breaks gradient banding on smooth sky.
+      '  colour += (skyHash(gl_FragCoord.xy) - 0.5) / 255.0;',
       '  gl_FragColor = vec4(colour, 1.0);',
       '}',
     ].join('\n'),
@@ -247,9 +267,9 @@ function buildSunSprite() {
   canvas.height = 128;
   const context = canvas.getContext('2d');
   const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gradient.addColorStop(0, 'rgba(255, 225, 160, 0.95)');
-  gradient.addColorStop(0.25, 'rgba(255, 209, 102, 0.55)');
-  gradient.addColorStop(1, 'rgba(255, 158, 100, 0)');
+  gradient.addColorStop(0, 'rgba(255, 236, 180, 0.95)');
+  gradient.addColorStop(0.25, 'rgba(255, 214, 130, 0.5)');
+  gradient.addColorStop(1, 'rgba(255, 179, 128, 0)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, 128, 128);
   const texture = new THREE.CanvasTexture(canvas);
@@ -311,15 +331,16 @@ export function buildSky(scene) {
   scene.add(sunLight);
   scene.add(sunLight.target);
 
-  // Fill balance (VD-09/VD-10): hemisphere 1.2 and ambient 0.45, down
-  // from 2.0/0.9 — cream paint stays cream instead of lilac, off-lane
-  // sea stays teal, and the flat wash that fed the sun blowout is gone.
-  const hemisphereLight = new THREE.HemisphereLight(PALETTE.hemisphereSky, PALETTE.hemisphereGround, 1.2);
+  // Fill balance (golden-hour upgrade): hemisphere 0.6 (warm-violet
+  // sky / olive-brown ground) + ambient 0.10 — the PMREM sky
+  // environment (lighting.js scene.environment) now carries most of
+  // the ambient term, so these stay low to keep shadows modelled.
+  const hemisphereLight = new THREE.HemisphereLight(PALETTE.hemisphereSky, PALETTE.hemisphereGround, 0.6);
   hemisphereLight.name = 'dawnHemisphereLight';
   scene.add(hemisphereLight);
 
   const ambientLight = new THREE.AmbientLight(PALETTE.ambient);
-  ambientLight.intensity = 0.45;
+  ambientLight.intensity = 0.10;
   ambientLight.name = 'dawnAmbientLight';
   scene.add(ambientLight);
 

@@ -20,6 +20,7 @@ import { buildGlassCockpit } from './cockpit-glass.js';
 import { buildCockpitControls } from './cockpit-controls.js';
 import { buildCockpitTrim } from './cockpit-trim.js';
 import { buildCockpitDetail } from './cockpit-detail.js';
+import { VEHICLES } from './vehicles.js';
 
 // ---------------------------------------------------------------- layout
 
@@ -3011,58 +3012,38 @@ function resolveControls(plane, controlsArgument) {
 export function buildAircraft() {
   const materials = createAircraftMaterials();
 
-  // Exterior group (chase / tower views).
+  // Exterior group (chase / tower views): a stable wrapper holding
+  // the ACTIVE vehicle exterior from vehicles.js. Default
+  // 'aurora-plane' is the plane-v2 rebuild integrated 2026-11-27
+  // (user-approved replacement) — same axes/layout constants, its
+  // own shadow pass, static nav/landing lights. setVehicle() swaps
+  // the child; damage smoke + exterior FX stay on the wrapper so
+  // they never detach. The cockpit group below is unchanged.
   const group = new THREE.Group();
   group.name = 'aircraft-exterior';
-  const fuselage = buildFuselageWithCowling(materials);
-  const wingBuild = buildHighWingWithStruts(materials);
-  const tailBuild = buildTailWithControlSurfaces(materials);
-  const gearBuild = buildFixedGearWithTundraTyres(materials);
-  const exteriorPropeller = buildPropellerWithBlurDisc(materials, true);
-  const navLights = buildNavigationLights();
+  const vehicleCache = new Map();
+  let activeVehicle = null;
+  let activeVehicleId = null;
+  function buildVehicleById(id) {
+    const def = VEHICLES.find((v) => v.id === id);
+    if (!def) return null;
+    try {
+      return def.build();
+    } catch (error) {
+      return null;
+    }
+  }
+  activeVehicle = buildVehicleById('aurora-plane');
+  activeVehicleId = 'aurora-plane';
+  if (activeVehicle) {
+    vehicleCache.set('aurora-plane', activeVehicle);
+    group.add(activeVehicle.group);
+  }
+  // Plane-v2 carries its own static lights; the animated strobe/beacon
+  // rig is not mounted on the new airframe.
+  const navLights = null;
   const damageSmoke = buildDamageSmoke();
-  group.add(
-    fuselage,
-    wingBuild.wing,
-    tailBuild.tail,
-    gearBuild.gear,
-    exteriorPropeller.propeller,
-    navLights.lights,
-    damageSmoke.points,
-  );
-  // D-130: only major airframe shapes cast shadows. The old traverse
-  // flagged every opaque exterior mesh (~60–90: panel-line rings, door
-  // outlines, cheatlines, struts, bulbs, decals), and the shadow pass
-  // paid a draw call for each. A mesh casts when its geometry bounding
-  // box is bulky enough to read in a shadow (≥0.03 m³ — fuselage lathe,
-  // wing panels + flaps/ailerons, fin/rudder, stabiliser/elevator,
-  // tyres) and it is not panel-line trim. Small details stay out:
-  // struts, gear legs, cheatlines, door outlines, bulbs, decals.
-  group.traverse((object) => {
-    if (!object.isMesh || object.material.transparent) return;
-    if (object.userData.noShadow) return; // merged trim stays shadow-free (VD-09)
-    if (object.material === materials.panelLine) return;
-    if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
-    const box = object.geometry.boundingBox;
-    const volume = (box.max.x - box.min.x) * (box.max.y - box.min.y) * (box.max.z - box.min.z);
-    object.castShadow = volume >= 0.03;
-  });
-  // The prop spinner cone (0.043 m³) passes the volume test but the
-  // propeller never casts: blades/tips are already under the threshold,
-  // so opt the whole prop subtree out explicitly.
-  // VD6-SHADOW: blades + tips DO cast (6 tiny boxes) so the parked /
-  // idling prop throws its thin shadow across the cowling at the 9°
-  // dawn sun, like the references. Spinner + blur disc stay out (the
-  // disc is transparent; a solid disc shadow would be wrong). At RPM
-  // ≥1000 the blades hide and only the disc shows — shadow-free, and
-  // D-135's pose-gated shadow map means a frozen blade angle while
-  // parked, which is exactly when the blades are static anyway.
-  exteriorPropeller.propeller.traverse((object) => {
-    if (object.isMesh) object.castShadow = false;
-  });
-  exteriorPropeller.bladeGroup.traverse((object) => {
-    if (object.isMesh) object.castShadow = true;
-  });
+  group.add(damageSmoke.points);
   // Wingtip vapour and landing lights (aircraft-fx.js), attached
   // after the shadow pass so no transparent effect mesh can cast.
   let exteriorEffects = null;
@@ -3156,6 +3137,7 @@ export function buildAircraft() {
 
   // ------------------------------------------------------------ state
   let lastPlane = null;
+  let aircraftApi = null; // assigned at the return below; setVehicle patches wingGroup on it
   let damageLevel = 0;
   let currentRpm = 0;
   let propellerAngle = 0;
@@ -3196,14 +3178,21 @@ export function buildAircraft() {
     // stay faintly visible through it. Only opacity/visibility/rotation
     // writes per frame — no allocations.
     const discOpacity = clampNumber((currentRpm - 450) / 1100, 0, 1) * 0.62;
-    for (const prop of [exteriorPropeller, noseBuild.cockpitPropeller]) {
-      prop.propeller.rotation.z = propellerAngle;
-      prop.bladeGroup.visible = bladesVisible;
-      prop.blurDiscMaterial.opacity = discOpacity;
-      if (prop.blurDisc) {
-        prop.blurDisc.visible = discOpacity > 0.01;
-        prop.blurDisc.rotation.z = propellerAngle * 0.12; // slow shimmer
-      }
+    // Exterior: delegate to the active vehicle (plane prop or heli
+    // rotors — vehicles.js owns the visuals, same rpm/angle drive).
+    if (activeVehicle && typeof activeVehicle.setPropeller === 'function') {
+      try {
+        activeVehicle.setPropeller(currentRpm, propellerAngle);
+      } catch (error) { /* visual only */ }
+    }
+    // Cockpit nose-view prop (its group is hidden while a heli flies).
+    const noseProp = noseBuild.cockpitPropeller;
+    noseProp.propeller.rotation.z = propellerAngle;
+    noseProp.bladeGroup.visible = bladesVisible;
+    noseProp.blurDiscMaterial.opacity = discOpacity;
+    if (noseProp.blurDisc) {
+      noseProp.blurDisc.visible = discOpacity > 0.01;
+      noseProp.blurDisc.rotation.z = propellerAngle * 0.12; // slow shimmer
     }
   }
 
@@ -3228,6 +3217,7 @@ export function buildAircraft() {
   }
 
   function updateNavigationLights() {
+    if (!navLights) return; // plane-v2 lights are static
     const t = visualTimeSeconds;
     const strobePhase = t % 1.4;
     const strobeOn = strobePhase < 0.06 || (strobePhase > 0.18 && strobePhase < 0.24);
@@ -3247,11 +3237,15 @@ export function buildAircraft() {
     const sink = lastPlane ? Math.max(0, -readVerticalSpeedMetresPerSecond(lastPlane)) : 0;
     const targetCompression = onGround ? 0.06 + clampNumber(sink, 0, 3) * 0.015 : 0;
     gearCompression = lerpNumber(gearCompression, targetCompression, clampNumber(dt * 8, 0, 1));
-    gearBuild.gear.position.y = gearCompression;
+    const gearGroup = activeVehicle && activeVehicle.gear;
+    if (gearGroup) gearGroup.position.y = gearCompression;
     if (onGround && lastPlane) {
       const speed = readAirspeedMetresPerSecond(lastPlane);
-      for (const wheel of gearBuild.wheels) {
-        wheel.wheelGroup.rotation.x -= (speed / wheel.radius) * dt;
+      const wheels = (activeVehicle && activeVehicle.wheels) || [];
+      for (const wheel of wheels) {
+        if (wheel && wheel.wheelGroup && wheel.radius > 0) {
+          wheel.wheelGroup.rotation.x -= (speed / wheel.radius) * dt;
+        }
       }
     }
   }
@@ -3349,12 +3343,15 @@ export function buildAircraft() {
     syncAircraftPoseToPlane(plane);
     advanceVisualTime();
 
-    wingBuild.controlSurfaces.aileronLeft.rotation.x = roll * 0.45;
-    wingBuild.controlSurfaces.aileronRight.rotation.x = -roll * 0.45;
-    wingBuild.controlSurfaces.flapLeft.rotation.x = flapStage * 0.26;
-    wingBuild.controlSurfaces.flapRight.rotation.x = flapStage * 0.26;
-    tailBuild.elevatorPivot.rotation.x = -pitch * 0.5;
-    tailBuild.rudderPivot.rotation.y = yaw * 0.45;
+    // Exterior surfaces / rotor-disc tilt: the active vehicle owns
+    // its moving parts (planes: ailerons/flaps/elevator/rudder with
+    // the same deflections as before; helis: visual disc tilt only,
+    // no control-surface calls that do not exist).
+    if (activeVehicle && typeof activeVehicle.setControls === 'function') {
+      try {
+        activeVehicle.setControls({ pitch, roll, yaw, flaps: flapStage });
+      } catch (error) { /* visual only — never break the flight loop */ }
+    }
 
     yokeBuild.pilotYoke.yokeGroup.rotation.z = -roll * 0.65;
     yokeBuild.pilotYoke.yokeGroup.position.z = yokeBuild.pilotYoke.baseZ + pitch * 0.07;
@@ -3474,15 +3471,49 @@ export function buildAircraft() {
     }
   }
 
-  return {
+  // Swap the exterior vehicle (vehicles.js). Lazy-build + cache;
+  // damage smoke and exterior FX stay attached to the wrapper
+  // group, so a swap can never detach them. Returns success.
+  function setVehicle(id) {
+    if (id === activeVehicleId) return true;
+    let vehicle = vehicleCache.get(id);
+    if (!vehicle) {
+      vehicle = buildVehicleById(id);
+      if (!vehicle) return false;
+      vehicleCache.set(id, vehicle);
+    }
+    if (activeVehicle && activeVehicle.group) group.remove(activeVehicle.group);
+    group.add(vehicle.group);
+    activeVehicle = vehicle;
+    activeVehicleId = id;
+    const isHeli = vehicle.kind === 'heli';
+    // Wingtip vapour + wing landing light are plane fittings: hide
+    // (never detach) them on helicopters.
+    if (exteriorEffects) exteriorEffects.group.visible = !isHeli;
+    // No nose propeller in the cockpit view of a helicopter.
+    noseBuild.cockpitPropeller.propeller.visible = !isHeli;
+    if (vehicle.smokeAnchor) damageSmoke.points.position.copy(vehicle.smokeAnchor);
+    else damageSmoke.points.position.set(0.35, -0.1, -3.3);
+    if (aircraftApi) aircraftApi.wingGroup = vehicle.wingGroup || null;
+    return true;
+  }
+
+  function getVehicleId() {
+    return activeVehicleId;
+  }
+
+  aircraftApi = {
     group,
     cockpit,
-    wingGroup: wingBuild.wing, // 'aircraft-wing' — exterior wing + struts
+    wingGroup: activeVehicle ? (activeVehicle.wingGroup || null) : null, // 'aircraft-wing' — exterior wing + struts (null on helis)
     cockpitWingCopies: noseBuild.wingCopies, // 'cockpit-wing-copies' — hidden in cockpit view (user order 2026-11-27)
     setControlsVisual,
     setInstruments,
     setDamageVisual,
     update,
     setViewMode,
+    setVehicle,
+    getVehicleId,
   };
+  return aircraftApi;
 }

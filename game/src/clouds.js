@@ -1,21 +1,32 @@
-// clouds.js — VD6-CLOUDS volumetric-LOOK puffy dawn clouds (V6-CLOUDS).
+// clouds.js — volumetric-LOOK puffy dawn clouds (round 2 volume fix).
 //
-// Replaces the render.js two-tone sphere field (VD-10/VD6-22/VD6-LOOK
-// lineage) with soft sunset-lit cumulus masses matched to the user's
-// chase/tower references: clustered near-spherical puffs with a baked
-// vertical colour gradient (warm cream-pink lit tops, rose mid, violet
-// bellies), a sun-side orange boost, fresnel-faded silhouettes so puffs
-// read as soft volumes instead of hard discs/UFOs, plus layered soft
-// billboard shells (canvas-generated lumpy puff sprites) that halo every
-// core and carry the high wispy layer.
+// Round 1 read as flat clip-art discs: puffs were heavily squashed
+// spheres in a flat XZ ring with depthWrite off (no occlusion between
+// puffs) and a plain white radial-gradient shell texture. Round 2
+// rebuilds the volume to match the references (env1/env2/env8: big
+// billowing cumulus, warm cream crowns, soft violet-grey bellies):
+//   * fewer, larger clouds with many more puffs each, distributed in
+//     a real 3D volume (wide flat base skirt + stacked tower + volume
+//     fill) with wide per-puff size/rotation variance;
+//   * opaque instanced cores (depthWrite ON) so front puffs occlude
+//     rear ones — the occlusion is what sells volume — with a
+//     fresnel rim that melts toward the peach haze instead of an
+//     alpha fade, and a gently lump-displaced sphere so no silhouette
+//     is a perfect disc;
+//   * per-puff cluster-height shading (instanced aPuffData: height01
+//     + sunSide01): warm cream tops/sun side, lavender-grey bellies,
+//     fake AO at the cluster base, golden sun boost;
+//   * shell sprites use a multi-lobed canvas texture with BAKED
+//     internal shading (bright crown, darker violet base, eroded
+//     cauliflower edge), 2–3 layered lobes per puff plus a soft
+//     per-cloud belly glow, tinted by puff height.
 //
-// Budget: 3 draw calls total (1 instanced core mesh + 2 shell Points),
-// vs 2 for the old field — well inside the +8 allowance. All drift is
-// a shader time uniform (eastward 2.2 m/s with wrap + gentle bob, the
-// same formula in core and shell shaders so halos stay glued to cores);
-// the per-frame update only advances one float — zero allocations.
-// Procedural only: fixed-seed placement (reproducible screenshots),
-// canvas textures, no assets. Logic untouched; visual-only module.
+// Budget: 3 draw calls total (1 instanced core mesh + 2 shell Points).
+// All drift is a shader time uniform (eastward 2.2 m/s with wrap +
+// gentle bob, altitude parallax — the same formula in core and shell
+// shaders so halos stay glued to cores); the per-frame update only
+// advances one float — zero allocations. Procedural only: fixed-seed
+// placement (reproducible screenshots), canvas textures, no assets.
 //
 // Exports: buildVolumetricClouds() -> Group,
 //          updateVolumetricClouds(group, dt) — called from render.js
@@ -32,11 +43,10 @@ const SUN_DIRECTION = new THREE.Vector3(
   0.18,
 ).normalize();
 
-// Scene fog from render.js createRenderer (PALETTE.fog, 800–6000 m) —
-// the shell shader fades into the same warm haze manually.
-const FOG_COLOUR = new THREE.Color(0xe8a07a);
-const FOG_NEAR = 800;
-const FOG_FAR = 6000;
+// Scene fog from render.js createRenderer (peach FogExp2) — the
+// shell shader fades into the same haze manually (exp2 curve).
+const FOG_COLOUR = new THREE.Color(0xf5b88a);
+const FOG_DENSITY = 0.00016;
 
 const DRIFT_SPEED = 2.2; // m/s eastward, calm dawn air (matches old field)
 const DRIFT_RANGE = 13000; // wrap span, ±6500 m (old field used the same)
@@ -51,10 +61,13 @@ function makeSeededRandom(seed) {
   };
 }
 
-// Lumpy soft puff sprite: overlapping radial gradients composited
-// additively give an irregular cumulus alpha instead of a perfect disc.
-// Two variants (different seeds) split across two Points draws so the
-// shells never read as one stamped texture.
+// Multi-lobed puff sprite with baked internal shading: ~30 overlapping
+// radial-gradient lobes build an irregular cauliflower alpha (not a
+// disc), a vertical source-atop gradient shades crown bright cream ->
+// base violet-grey, a soft shadow crescent darkens the belly, a crown
+// highlight lifts the top, and destination-out bites erode the rim so
+// layered shells never stamp a circular edge. The shell shader
+// multiplies texture RGB by the per-point height tint.
 function makePuffTexture(seed) {
   const random = makeSeededRandom(seed);
   const size = 256;
@@ -66,15 +79,15 @@ function makePuffTexture(seed) {
   ctx.globalCompositeOperation = 'lighter';
   // Slight vertical squash: cumulus shells are wider than tall.
   ctx.translate(size / 2, size / 2);
-  ctx.scale(1, 0.82);
+  ctx.scale(1, 0.85);
   ctx.translate(-size / 2, -size / 2);
-  const lobes = 16;
+  const lobes = 30;
   for (let i = 0; i < lobes; i += 1) {
     const angle = random() * Math.PI * 2;
-    const dist = random() * 62;
+    const dist = Math.pow(random(), 0.7) * 66;
     const cx = size / 2 + Math.cos(angle) * dist;
     const cy = size / 2 + Math.sin(angle) * dist * 0.8;
-    const radius = 34 + random() * 58;
+    const radius = 22 + random() * 52;
     const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
     gradient.addColorStop(0, 'rgba(255,255,255,0.20)');
     gradient.addColorStop(0.55, 'rgba(255,255,255,0.10)');
@@ -91,27 +104,66 @@ function makePuffTexture(seed) {
   core.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = core;
   ctx.fillRect(0, 0, size, size);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Internal vertical shading, clipped to the puff alpha: bright warm
+  // crown at the top melting to a violet-grey belly at the base.
+  ctx.globalCompositeOperation = 'source-atop';
+  const shade = ctx.createLinearGradient(0, size * 0.08, 0, size * 0.94);
+  shade.addColorStop(0, 'rgba(255,252,244,0.95)');
+  shade.addColorStop(0.42, 'rgba(238,230,240,0.55)');
+  shade.addColorStop(0.78, 'rgba(176,164,205,0.72)');
+  shade.addColorStop(1, 'rgba(146,134,184,0.9)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, size, size);
+  // Belly shadow crescent + crown highlight for internal modelling.
+  const belly = ctx.createRadialGradient(size / 2, size * 0.92, 4, size / 2, size * 0.92, 104);
+  belly.addColorStop(0, 'rgba(110,98,152,0.42)');
+  belly.addColorStop(1, 'rgba(110,98,152,0)');
+  ctx.fillStyle = belly;
+  ctx.fillRect(0, 0, size, size);
+  const crown = ctx.createRadialGradient(size / 2, size * 0.3, 2, size / 2, size * 0.3, 78);
+  crown.addColorStop(0, 'rgba(255,255,250,0.5)');
+  crown.addColorStop(1, 'rgba(255,255,250,0)');
+  ctx.fillStyle = crown;
+  ctx.fillRect(0, 0, size, size);
+  // Erode the rim: small bites near the edge break the disc outline.
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 42; i += 1) {
+    const angle = random() * Math.PI * 2;
+    const dist = 84 + random() * 38;
+    const cx = size / 2 + Math.cos(angle) * dist;
+    const cy = size / 2 + Math.sin(angle) * dist * 0.85;
+    const radius = 6 + random() * 16;
+    const bite = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    bite.addColorStop(0, 'rgba(0,0,0,0.55)');
+    bite.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bite;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
 // Core material: MeshStandardMaterial (keeps scene lights + fog) with
-// injected gradient/sun/fresnel shading and shader drift. The vertical
-// gradient uses the unit-sphere local Y, so every puff is lit from its
-// own top regardless of where it sits in the cluster — the classic
-// cheap volumetric-cloud look, with the sun boost on the east faces.
+// injected cluster-height gradient/sun/fresnel shading and shader
+// drift. Round 2: OPAQUE with depthWrite on — puffs occlude each
+// other like real cumulus lobes; the fresnel rim melts the diffuse
+// toward the peach haze colour instead of fading alpha (an alpha
+// fade with depthWrite off was what made round 1 read as flat discs).
 function makeCoreMaterial(sharedTime) {
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    emissive: 0xff9e64,
+    emissive: 0xffc987,
     emissiveIntensity: 0.1, // lifts shadow sides warm; gradient does the rest
     roughness: 1.0,
     metalness: 0.0,
     flatShading: false,
-    transparent: true,
-    opacity: 0.97,
-    depthWrite: false,
+    transparent: false,
+    depthWrite: true,
   });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uCloudTime = sharedTime;
@@ -122,7 +174,9 @@ function makeCoreMaterial(sharedTime) {
         [
           '#include <common>',
           'uniform float uCloudTime;',
+          'attribute vec2 aPuffData;', // x: cluster height01, y: sunSide01
           'varying float vCloudLocalY;',
+          'varying vec2 vCloudPuffData;',
           'varying vec3 vCloudNormalW;',
           'varying vec3 vCloudWorldPos;',
         ].join('\n'),
@@ -132,6 +186,7 @@ function makeCoreMaterial(sharedTime) {
         [
           '#include <begin_vertex>',
           'vCloudLocalY = position.y;',
+          'vCloudPuffData = aPuffData;',
           '#ifdef USE_INSTANCING',
           '  vCloudNormalW = normalize( mat3( instanceMatrix ) * normal );',
           '  vCloudWorldPos = ( modelMatrix * instanceMatrix * vec4( transformed, 1.0 ) ).xyz;',
@@ -149,9 +204,12 @@ function makeCoreMaterial(sharedTime) {
           '  mvPosition = instanceMatrix * mvPosition;',
           // Eastward drift with wrap + gentle bob, derived from the
           // instance translation so the shell shader can reproduce the
-          // exact same offset from its point position.
-          '  float cloudDriftX = mod( instanceMatrix[3][0] + uCloudTime * '
-            + DRIFT_SPEED.toFixed(1) + ' + ' + (DRIFT_RANGE / 2).toFixed(1)
+          // exact same offset from its point position. Higher clouds
+          // drift slower (parallax) — same formula in both shaders.
+          '  float cloudSpeed = ' + DRIFT_SPEED.toFixed(1)
+            + ' * ( 1.0 - clamp( ( instanceMatrix[3][1] - 400.0 ) / 1200.0, 0.0, 1.0 ) * 0.35 );',
+          '  float cloudDriftX = mod( instanceMatrix[3][0] + uCloudTime * cloudSpeed'
+            + ' + ' + (DRIFT_RANGE / 2).toFixed(1)
             + ', ' + DRIFT_RANGE.toFixed(1) + ' ) - ' + (DRIFT_RANGE / 2).toFixed(1)
             + ' - instanceMatrix[3][0];',
           '  float cloudBobY = sin( uCloudTime * 0.08 + instanceMatrix[3][0] * 0.005'
@@ -170,6 +228,7 @@ function makeCoreMaterial(sharedTime) {
           '#include <common>',
           'uniform vec3 uCloudSunDir;',
           'varying float vCloudLocalY;',
+          'varying vec2 vCloudPuffData;',
           'varying vec3 vCloudNormalW;',
           'varying vec3 vCloudWorldPos;',
           'vec3 gCloudGrad;', // set in color_fragment, read by emissive below
@@ -184,23 +243,35 @@ function makeCoreMaterial(sharedTime) {
           '{',
           '  float gy = clamp( vCloudLocalY, -1.0, 1.0 );',
           '  gCloudY = gy;',
-          '  vec3 belly = vec3( 0.46, 0.36, 0.53 );', // violet underside
-          '  vec3 midTone = vec3( 1.0, 0.78, 0.68 );', // rose mid
-          '  vec3 topTone = vec3( 1.15, 0.95, 0.78 );', // warm cream-pink top
-          '  vec3 grad = mix( belly, midTone, smoothstep( -0.9, 0.05, gy ) );',
-          '  grad = mix( grad, topTone, smoothstep( 0.05, 0.95, gy ) );',
+          '  float clusterH = clamp( vCloudPuffData.x, 0.0, 1.0 );',
+          '  float sunSide = clamp( vCloudPuffData.y, 0.0, 1.0 );',
+          // Combined vertical shade: puff-local Y (each lobe lit from
+          // its own crown) blended with cluster height (tower tops
+          // brighter than the base skirt across the whole cloud).
+          '  float shadeY = clamp( gy * 0.55 + ( clusterH * 2.0 - 1.0 ) * 0.65, -1.0, 1.0 );',
+          '  vec3 belly = vec3( 0.60, 0.55, 0.74 );', // lavender-grey underside
+          '  vec3 midTone = vec3( 0.99, 0.89, 0.83 );', // warm pale mid
+          '  vec3 topTone = vec3( 1.17, 1.04, 0.87 );', // warm cream crown
+          '  vec3 grad = mix( belly, midTone, smoothstep( -0.9, 0.05, shadeY ) );',
+          '  grad = mix( grad, topTone, smoothstep( 0.05, 0.95, shadeY ) );',
+          // Fake AO: puffs low in the cluster sit in the mass shadow.
+          '  grad *= mix( 0.78, 1.06, clusterH );',
+          // Sun-side puffs run warmer/brighter than shade-side puffs.
+          '  grad *= mix( 0.94, 1.08, sunSide );',
+          '  grad += vec3( 0.10, 0.05, -0.02 ) * sunSide * smoothstep( -0.2, 0.8, shadeY );',
           '  float sunAmt = max( dot( normalize( vCloudNormalW ), uCloudSunDir ), 0.0 );',
-          '  grad += vec3( 1.0, 0.55, 0.28 ) * pow( sunAmt, 2.0 ) * 0.38'
-            + ' * smoothstep( -0.2, 0.8, gy );', // sunset-lit east faces
+          '  grad += vec3( 1.0, 0.68, 0.38 ) * pow( sunAmt, 2.0 ) * 0.38'
+            + ' * smoothstep( -0.2, 0.8, shadeY );', // golden-lit east faces
           '  gCloudGrad = grad;',
           '  diffuseColor.rgb *= grad;',
-          // Soft silhouette: fade alpha toward grazing angles so puff
-          // rims melt into the sky instead of ending in a hard disc edge.
+          // Soft silhouette without transparency: grazing rims melt
+          // toward the peach haze so the opaque lobe edge dissolves
+          // into the sky while depth still occludes rear puffs.
           '  vec3 viewDir = normalize( vViewPosition );',
           '  vec3 nView = normalize( ( viewMatrix * vec4( normalize( vCloudNormalW ), 0.0 ) ).xyz );',
           '  float fres = pow( 1.0 - abs( dot( nView, viewDir ) ), 2.2 );',
           '  gCloudFres = fres;',
-          '  diffuseColor.a *= ( 1.0 - fres * 0.92 );',
+          '  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.99, 0.84, 0.75 ), fres * 0.5 );',
           '}',
         ].join('\n'),
       )
@@ -211,25 +282,25 @@ function makeCoreMaterial(sharedTime) {
           '{',
           // Self-illumination from the same gradient: the low sun barely
           // grazes cloud tops, so scene lights alone leave them mauve;
-          // the reference cumulus glow cream-pink from within.
-          '  float glowAmt = mix( 0.22, 0.62, smoothstep( -0.9, 0.9, gCloudY ) );',
+          // the reference cumulus glow cream from within.
+          '  float glowAmt = mix( 0.20, 0.60, smoothstep( -0.9, 0.9, gCloudY ) );',
           '  totalEmissiveRadiance += gCloudGrad * glowAmt;',
           // Backlit rim: clouds between camera and sun get a golden
           // fresnel edge instead of silhouetting black on the disc.
           '  vec3 toCam = normalize( cameraPosition - vCloudWorldPos );',
           '  float backlit = pow( max( dot( -toCam, uCloudSunDir ), 0.0 ), 3.0 );',
-          '  totalEmissiveRadiance += vec3( 1.0, 0.58, 0.28 ) * gCloudFres * backlit * 0.9;',
+          '  totalEmissiveRadiance += vec3( 1.0, 0.70, 0.40 ) * gCloudFres * backlit * 0.85;',
           '}',
         ].join('\n'),
       );
   };
-  material.customProgramCacheKey = () => 'aurora-clouds-v1';
+  material.customProgramCacheKey = () => 'aurora-clouds-v2';
   return material;
 }
 
-// Shell material: camera-facing Points with the lumpy puff texture,
-// per-point size/colour/alpha, the same drift formula as the cores,
-// and manual fog to match the scene haze.
+// Shell material: camera-facing Points with the internally-shaded
+// puff texture (RGB multiplied by the per-point height tint), the
+// same drift formula as the cores, and manual fog to match the haze.
 function makeShellMaterial(texture, sharedTime) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -237,8 +308,7 @@ function makeShellMaterial(texture, sharedTime) {
       uCloudTime: sharedTime,
       uViewportHeight: { value: 720 },
       uFogColour: { value: FOG_COLOUR },
-      uFogNear: { value: FOG_NEAR },
-      uFogFar: { value: FOG_FAR },
+      uFogDensity: { value: FOG_DENSITY },
     },
     vertexShader: [
       'attribute float aSize;',
@@ -253,7 +323,10 @@ function makeShellMaterial(texture, sharedTime) {
       '  vColour = aColour;',
       '  vAlpha = aAlpha;',
       '  vec3 pos = position;',
-      '  float driftX = mod( pos.x + uCloudTime * ' + DRIFT_SPEED.toFixed(1)
+      // Same parallax drift as the core shader (higher = slower).
+      '  float cloudSpeed = ' + DRIFT_SPEED.toFixed(1)
+        + ' * ( 1.0 - clamp( ( position.y - 400.0 ) / 1200.0, 0.0, 1.0 ) * 0.35 );',
+      '  float driftX = mod( pos.x + uCloudTime * cloudSpeed'
         + ' + ' + (DRIFT_RANGE / 2).toFixed(1) + ', ' + DRIFT_RANGE.toFixed(1)
         + ' ) - ' + (DRIFT_RANGE / 2).toFixed(1) + ' - pos.x;',
       '  pos.x += driftX;',
@@ -263,15 +336,14 @@ function makeShellMaterial(texture, sharedTime) {
       // World-size points: px = size * proj[1][1] * (height/2) / dist.
       '  gl_PointSize = aSize * projectionMatrix[1][1] * ( uViewportHeight * 0.5 )'
         + ' / max( -mvPosition.z, 1.0 );',
-      '  gl_PointSize = min( gl_PointSize, 1400.0 );',
+      '  gl_PointSize = min( gl_PointSize, 1600.0 );',
       '  gl_Position = projectionMatrix * mvPosition;',
       '}',
     ].join('\n'),
     fragmentShader: [
       'uniform sampler2D uMap;',
       'uniform vec3 uFogColour;',
-      'uniform float uFogNear;',
-      'uniform float uFogFar;',
+      'uniform float uFogDensity;',
       'varying vec3 vColour;',
       'varying float vAlpha;',
       'varying float vFogDepth;',
@@ -279,8 +351,11 @@ function makeShellMaterial(texture, sharedTime) {
       '  vec4 tex = texture2D( uMap, gl_PointCoord );',
       '  float alpha = tex.a * vAlpha;',
       '  if ( alpha < 0.004 ) discard;',
-      '  vec3 colour = vColour;',
-      '  float fogFactor = smoothstep( uFogNear, uFogFar, vFogDepth );',
+      // Texture RGB carries the baked crown->belly shading; the
+      // per-point colour tints it by puff height/sun side.
+      '  vec3 colour = vColour * tex.rgb * 1.18;',
+      // FogExp2 curve, matching the scene fog exactly.
+      '  float fogFactor = 1.0 - exp( -uFogDensity * uFogDensity * vFogDepth * vFogDepth );',
       '  colour = mix( colour, uFogColour, fogFactor );',
       '  gl_FragColor = vec4( colour, alpha );',
       '}',
@@ -291,6 +366,26 @@ function makeShellMaterial(texture, sharedTime) {
   });
 }
 
+// Gentle lump displacement on the shared unit sphere: no puff is a
+// perfect disc/sphere silhouette. Deterministic (position-based, no
+// RNG state consumed), normals recomputed once at build.
+function makeLumpySphereGeometry() {
+  const geometry = new THREE.SphereGeometry(1, 12, 8);
+  const pos = geometry.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 1) {
+    v.fromBufferAttribute(pos, i);
+    const lump = 1
+      + 0.055 * Math.sin(v.x * 4.1 + v.y * 2.3)
+      + 0.045 * Math.sin(v.y * 5.2 + v.z * 3.1)
+      + 0.04 * Math.sin(v.z * 4.6 + v.x * 2.7);
+    v.multiplyScalar(lump);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function buildVolumetricClouds() {
   const group = new THREE.Group();
   group.name = 'volumetricClouds';
@@ -298,9 +393,11 @@ export function buildVolumetricClouds() {
   const sharedTime = { value: 0 };
 
   // ---- Placement plan -------------------------------------------------
-  // Layers: low scud (400–520 m), main cumulus deck (560–850 m), high
-  // wisps (980–1280 m), plus 3 hero masses east near the sun. Distances
-  // 1100–5400 m keep clouds clear of the flight area and inside fog.
+  // Round 2: FEWER, LARGER clouds (references show big billowing
+  // masses, not a crowded field of discs). Layers: low scud
+  // (400–520 m), main cumulus deck (560–850 m), high wisps
+  // (980–1280 m), 2 near masses, plus 2 hero masses east near the
+  // sun. Distances 1100–5400 m keep clouds clear of the flight area.
   const cloudSpecs = [];
   const addRingClouds = (count, altMin, altMax, baseMin, baseMax, puffMin, puffMax, flat) => {
     for (let i = 0; i < count; i += 1) {
@@ -318,50 +415,56 @@ export function buildVolumetricClouds() {
       });
     }
   };
-  addRingClouds(8, 400, 520, 40, 70, 6, 8, 0.55); // low scud
-  addRingClouds(24, 560, 850, 55, 100, 8, 12, 0.8); // main cumulus deck
-  addRingClouds(6, 980, 1280, 90, 150, 5, 7, 0.32); // high wisps
-  // Near clouds: a few closer, higher masses that loom at the frame
-  // edges like the tower reference (still ≥650 m up, clear of flight).
-  for (let i = 0; i < 4; i += 1) {
+  addRingClouds(3, 400, 520, 70, 115, 10, 14, 0.6); // low scud
+  addRingClouds(10, 560, 850, 105, 190, 20, 27, 0.95); // main cumulus deck
+  addRingClouds(3, 980, 1280, 160, 240, 7, 10, 0.35); // high wisps
+  // Near clouds: closer, higher masses that loom at the frame edges
+  // like the references (still ≥650 m up, clear of flight).
+  for (let i = 0; i < 2; i += 1) {
     const angle = random() * Math.PI * 2;
     const distance = 750 + random() * 400;
     cloudSpecs.push({
       x: Math.cos(angle) * distance,
       y: 650 + random() * 300,
       z: Math.sin(angle) * distance,
-      baseRadius: 60 + random() * 50,
-      puffCount: 9 + Math.floor(random() * 4),
-      flat: 0.8,
+      baseRadius: 110 + random() * 50,
+      puffCount: 18 + Math.floor(random() * 7),
+      flat: 0.95,
       hero: false,
       rotationY: random() * Math.PI * 2,
     });
   }
   // Hero clouds: big billowing masses bracketing the sunrise azimuth
   // (atan2 of the sun direction ≈ 0.18 rad) so the sun peeks between
-  // them like the tower reference.
+  // them like the references.
   const sunAzimuth = Math.atan2(SUN_DIRECTION.z, SUN_DIRECTION.x);
-  for (let i = 0; i < 3; i += 1) {
-    const angle = sunAzimuth + (i - 1) * (0.42 + random() * 0.2);
+  for (let i = 0; i < 2; i += 1) {
+    const angle = sunAzimuth + (i === 0 ? -1 : 1) * (0.42 + random() * 0.2);
     const distance = 2300 + random() * 1300;
     cloudSpecs.push({
       x: Math.cos(angle) * distance,
       y: 520 + random() * 220,
       z: Math.sin(angle) * distance,
-      baseRadius: 110 + random() * 60,
-      puffCount: 14 + Math.floor(random() * 5),
-      flat: 0.85,
+      baseRadius: 200 + random() * 80,
+      puffCount: 28 + Math.floor(random() * 9),
+      flat: 1.0,
       hero: true,
       rotationY: random() * Math.PI * 2,
     });
   }
 
   // ---- Puff layout ----------------------------------------------------
-  // Each cloud: one central mass + clustered satellites stacked upward
-  // (tops rounder, bases wider/flatter) so the silhouette steps like a
-  // real cumulus from any angle.
+  // Real 3D volume per cloud, three populations:
+  //   base skirt (~35%): wide, flatter puffs low in the cluster;
+  //   tower (~40%): puffs stacked upward, shrinking with height so
+  //     the silhouette steps like a cumulus turret;
+  //   volume fill (~25%): random points inside the ellipsoid so the
+  //     mass has depth from every viewing angle (no flat shell).
+  // Per-puff height01 + sunSide01 feed the core shader (aPuffData)
+  // and the shell tints.
   const puffMatrices = [];
   const puffColours = [];
+  const puffData = []; // [height01, sunSide01] per puff
   const shellData = [[], []]; // two texture variants: {pos,size,colour,alpha}
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
@@ -369,70 +472,143 @@ export function buildVolumetricClouds() {
   const euler = new THREE.Euler();
   const scale = new THREE.Vector3();
   const colour = new THREE.Color();
-  const bellyShell = new THREE.Color(0x8a6f96);
-  const topShell = new THREE.Color(0xffd7ae);
+  const bellyShell = new THREE.Color(0xc4bade); // soft lavender-grey (texture darkens further)
+  const topShell = new THREE.Color(0xfff6e0); // warm cream
+  const sunAzimuthDir = new THREE.Vector2(SUN_DIRECTION.x, SUN_DIRECTION.z).normalize();
 
   for (const spec of cloudSpecs) {
     const cosR = Math.cos(spec.rotationY);
     const sinR = Math.sin(spec.rotationY);
+    const isWisp = spec.flat < 0.4;
     for (let p = 0; p < spec.puffCount; p += 1) {
-      const isCentre = p === 0;
-      const angle = random() * Math.PI * 2;
-      const dist = isCentre ? 0 : spec.baseRadius * (0.35 + random() * 0.95);
-      const height01 = isCentre ? 0.45 : random(); // 0 base … 1 top
-      const radius = isCentre
-        ? spec.baseRadius
-        : spec.baseRadius * (0.42 + random() * 0.5);
-      const localX = Math.cos(angle) * dist;
-      const localZ = Math.sin(angle) * dist * 0.8;
-      const localY = (height01 - 0.35) * spec.baseRadius * 0.75;
+      const frac = spec.puffCount > 1 ? p / (spec.puffCount - 1) : 0;
+      let localX = 0;
+      let localY = 0;
+      let localZ = 0;
+      let radius = spec.baseRadius;
+      if (p === 0) {
+        // Central mass anchoring the cluster.
+        localY = spec.baseRadius * 0.08;
+        radius = spec.baseRadius * (0.85 + random() * 0.2);
+      } else if (frac < 0.35) {
+        // Base skirt: wide ring, low and flatter.
+        const angle = random() * Math.PI * 2;
+        const dist = spec.baseRadius * (0.45 + random() * 0.75);
+        localX = Math.cos(angle) * dist;
+        localZ = Math.sin(angle) * dist * 0.82;
+        localY = (random() * 0.3 - 0.18) * spec.baseRadius;
+        radius = spec.baseRadius * (0.45 + random() * 0.32);
+      } else if (frac < 0.75) {
+        // Tower: stacked turret, radius shrinking with height.
+        const h = (frac - 0.35) / 0.4; // 0..1 up the tower
+        const angle = random() * Math.PI * 2;
+        const dist = spec.baseRadius * (0.5 * (1 - h) + 0.08) * random();
+        localX = Math.cos(angle) * dist;
+        localZ = Math.sin(angle) * dist * 0.82;
+        localY = (-0.05 + h * 0.95) * spec.baseRadius * (0.85 + random() * 0.3);
+        radius = spec.baseRadius * (0.68 - 0.34 * h) * (0.8 + random() * 0.35);
+      } else {
+        // Volume fill: random point in the ellipsoid (denser centre).
+        const theta = random() * Math.PI * 2;
+        const phi = Math.acos(2 * random() - 1);
+        const r = Math.pow(random(), 0.55);
+        localX = Math.sin(phi) * Math.cos(theta) * r * spec.baseRadius * 1.05;
+        localZ = Math.sin(phi) * Math.sin(theta) * r * spec.baseRadius * 0.85;
+        localY = Math.cos(phi) * r * spec.baseRadius * 0.55 + spec.baseRadius * 0.18;
+        radius = spec.baseRadius * (0.38 + random() * 0.4);
+      }
+      // Cluster height 0 (belly) .. 1 (crown) for shading.
+      const height01 = THREE.MathUtils.clamp(
+        0.5 + localY / (spec.baseRadius * 1.25), 0, 1,
+      );
+      // Sun side: horizontal offset direction vs the sun azimuth.
+      const offsetLen = Math.hypot(localX, localZ);
+      const sunSide01 = offsetLen > 0.001
+        ? THREE.MathUtils.clamp(
+          0.5 + 0.5 * ((localX / offsetLen) * sunAzimuthDir.x
+            + (localZ / offsetLen) * sunAzimuthDir.y), 0, 1,
+        )
+        : 0.5;
       // Rotate the cluster into the cloud's heading, then place in world.
       position.set(
         spec.x + localX * cosR - localZ * sinR,
         spec.y + localY,
         spec.z + localX * sinR + localZ * cosR,
       );
-      const squashY = spec.flat * (0.62 + height01 * 0.38);
-      scale.set(radius * 1.22, radius * squashY, radius * 1.02);
-      euler.set(0, random() * Math.PI, 0);
+      // Wide size variance, near-spherical (round 1's heavy squash
+      // was the disc look): base puffs flatter, crowns rounder.
+      const squashY = spec.flat * (0.72 + height01 * 0.34) * (0.88 + random() * 0.26);
+      scale.set(
+        radius * (0.95 + random() * 0.45),
+        radius * squashY,
+        radius * (0.88 + random() * 0.38),
+      );
+      euler.set((random() - 0.5) * 0.7, random() * Math.PI * 2, (random() - 0.5) * 0.7);
       quaternion.setFromEuler(euler);
       matrix.compose(position, quaternion, scale);
       puffMatrices.push(matrix.clone());
+      puffData.push(height01, sunSide01);
       // Per-puff tint: slight brightness/warmth variation; heroes glow
       // a touch brighter toward the sun.
       const bright = 0.9 + random() * 0.16 + (spec.hero ? 0.07 : 0);
       colour.setRGB(bright * 1.02, bright * 0.99, bright * 0.96);
       puffColours.push(colour.clone());
 
-      // Shells: one wide soft halo per puff + a smaller offset lobe on
-      // most puffs, tinted by height (violet base → warm top).
-      const shellTint = bellyShell.clone().lerp(topShell, 0.25 + height01 * 0.75);
-      if (spec.hero) shellTint.lerp(new THREE.Color(0xffe2bd), 0.35);
+      // Shells: 2–3 layered lobes per puff with 3D offsets, tinted by
+      // height + sun side (violet base -> warm sunlit crown). Low
+      // per-shell alpha: layering builds the soft volume.
+      const shellTint = bellyShell.clone().lerp(topShell, 0.2 + height01 * 0.8);
+      shellTint.lerp(new THREE.Color(0xffdfae), sunSide01 * 0.22);
+      if (spec.hero) shellTint.lerp(new THREE.Color(0xffe9c8), 0.3);
       const variant = Math.floor(random() * 2);
-      const isWisp = spec.flat < 0.4;
       shellData[variant].push({
         x: position.x, y: position.y, z: position.z,
-        size: radius * (isWisp ? 5.2 : 2.7),
+        size: radius * (isWisp ? 5.2 : 2.5 + random() * 0.9),
         colour: shellTint,
-        alpha: isWisp ? 0.07 : 0.19 + height01 * 0.06,
+        alpha: isWisp ? 0.07 : 0.10 + height01 * 0.05,
       });
-      if (!isWisp && random() < 0.65) {
+      if (!isWisp) {
         shellData[1 - variant].push({
-          x: position.x + (random() - 0.5) * radius * 0.9,
-          y: position.y + radius * 0.3,
-          z: position.z + (random() - 0.5) * radius * 0.9,
-          size: radius * 1.7,
+          x: position.x + (random() - 0.5) * radius * 1.1,
+          y: position.y + (random() - 0.3) * radius * 0.7,
+          z: position.z + (random() - 0.5) * radius * 1.1,
+          size: radius * (1.4 + random() * 0.6),
           colour: shellTint.clone().lerp(topShell, 0.3),
-          alpha: 0.2,
+          alpha: 0.12,
         });
+        if (random() < 0.5) {
+          shellData[variant].push({
+            x: position.x + (random() - 0.5) * radius * 1.4,
+            y: position.y - radius * 0.25,
+            z: position.z + (random() - 0.5) * radius * 1.4,
+            size: radius * 1.8,
+            colour: shellTint.clone().lerp(bellyShell, 0.35),
+            alpha: 0.09,
+          });
+        }
       }
     }
+    // Per-cloud belly glow: one wide soft lavender shell under the
+    // mass so the underside reads as shadowed volume, not a cut edge.
+    const bellyVariant = Math.floor(random() * 2);
+    shellData[bellyVariant].push({
+      x: spec.x,
+      y: spec.y - spec.baseRadius * 0.12,
+      z: spec.z,
+      size: spec.baseRadius * (isWisp ? 4.2 : 3.4),
+      colour: bellyShell.clone().lerp(new THREE.Color(0x9d8fc4), 0.45),
+      alpha: isWisp ? 0.05 : 0.10,
+    });
   }
 
   // ---- Core instanced mesh (1 draw) -----------------------------------
-  // 13×9 segments: smooth shading + fresnel fade carry the softness at
-  // cloud distances (≥1100 m); keeps the instanced puff field cheap.
-  const coreGeometry = new THREE.SphereGeometry(1, 13, 9);
+  // 12×8 lumpy spheres: occlusion + gradient shading carry the volume
+  // at cloud distances (≥750 m); keeps the instanced field cheap.
+  const coreGeometry = makeLumpySphereGeometry();
+  coreGeometry.setAttribute(
+    'aPuffData',
+    new THREE.InstancedBufferAttribute(new Float32Array(puffData), 2),
+  );
   const coreMesh = new THREE.InstancedMesh(
     coreGeometry,
     makeCoreMaterial(sharedTime),

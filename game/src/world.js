@@ -13,15 +13,17 @@ import * as worldDressingModule from './world-dressing.js';
 import {
   makeDetailedRunwayTexture, makeDetailedParkingTexture, buildRunwayGlow, buildTaxiway,
 } from './runway-detail.js'; // V6-RUNWAY minimal hook (detail in runway-detail.js)
-import { makeTerrainAtlasTexture, makeRoadTextureV2, terrainTileIndex, terrainAtlasUV } from './terrain-tex.js';
-import { buildVegetation } from './vegetation.js'; // VD6-VEG (V6-VEGETATION): minimal hook, module owns all vegetation code
+import { makeTerrainAtlasTexture, makeTerrainNormalTexture, makeTerrainRoughnessTexture, makeRoadTextureV2, terrainTileIndex, terrainAtlasUV } from './terrain-tex.js';
+import { buildVegetation, buildConiferGeometry, buildDeciduousGeometry, createTreeMaterial, createTreeDepthMaterial, CONIFER_HEIGHT, DECIDUOUS_HEIGHT } from './vegetation.js'; // VD6-VEG (V6-VEGETATION): minimal hook, module owns all vegetation code
+import { buildStructuresDense } from './structures-dense.js'; // DENSE-STRUCT: watchtowers/houses/silhouettes, visual only
+import { buildRiver } from './river.js'; // DENSE-RIVER: Aurora river ribbon, visual only
 
 // ---------------------------------------------------------------------------
 // Palette (ui_spec.md §3.1 — exact hexes, one dawn style everywhere)
 // ---------------------------------------------------------------------------
 const CREAM_HEX = 0xf2ede4;
 const PALETTE = {
-  seaDeep: 0x123c5a,
+  seaDeep: 0x0d4f8a,
   seaSunPath: 0xe88b4a,
   sand: 0xd9b380,
   grass: 0x4e7a3a,
@@ -759,10 +761,20 @@ const LAMP_BASE_HEX = 0x332200; // dark amber base under the lamp emissives
 
 const MAT = {
   terrain: new THREE.MeshStandardMaterial({
-    // 1024 atlas (grass/dirt/rock/sand tiles, terrain-tex.js);
-    // per-vertex UVs select the tile.
+    // 2048x1024 atlas (8 tiles: lush/dry grass, plough, track, dirt,
+    // rock strata, sand, wet sand — terrain-tex.js); per-vertex UVs
+    // select the tile. Normal + roughness maps share the atlas layout
+    // so furrows/strata/ruts catch light; roughness 1.0 lets the map
+    // carry the per-surface values. Round-2: smooth normals
+    // (flatShading false, geometry already calls computeVertexNormals)
+    // — flat facets + 5 m vertex strata read as topographic contour
+    // stripes; smooth shading kills the banding while field edges
+    // still read from vertex colour (colours interpolate either way).
     map: makeTerrainAtlasTexture(),
-    vertexColors: true, roughness: 1.0, metalness: 0.0, flatShading: true,
+    normalMap: makeTerrainNormalTexture(),
+    normalScale: new THREE.Vector2(0.65, 0.65),
+    roughnessMap: makeTerrainRoughnessTexture(),
+    vertexColors: true, roughness: 1.0, metalness: 0.0, flatShading: false,
   }),
   cream: standardMaterial(PALETTE.cream),
   mailRed: standardMaterial(PALETTE.mailRed),
@@ -887,30 +899,112 @@ const TEMP_EULER = new THREE.Euler();
 const COLOR_SEABED = new THREE.Color(0x8a7a58);
 const COLOR_SAND = new THREE.Color(PALETTE.sand);
 const COLOR_FOAM = new THREE.Color(CREAM_HEX); // pale fringe at the waterline
-const COLOR_GRASS = new THREE.Color(PALETTE.grass);
-const COLOR_FIELD = new THREE.Color(PALETTE.field);
-const COLOR_SCRUB = new THREE.Color(PALETTE.scrub);
-const COLOR_DRY_FIELD = new THREE.Color(0xa8905a); // harvested / dry field
+// Round-2 brighten: vertex colour × atlas modulation double-darkened
+// under ACES 0.9 with a 9° sun, so terrain read dark purple-brown and
+// farmland read maroon. Terrain-only tones lifted toward the env5/env9
+// references (bright green + gold + warm-brown plough patchwork);
+// PALETTE hexes are untouched (bushes/props keep their colours).
+const COLOR_GRASS = new THREE.Color(0x6da34d);
+const COLOR_FIELD = new THREE.Color(0x7fb85c);
+const COLOR_SCRUB = new THREE.Color(0x8f9448);
+const COLOR_DRY_FIELD = new THREE.Color(0xc2a866); // harvested / dry field
 // Crop tones for the rectangular field patchwork (vertex colour only).
-const COLOR_CROP_LIGHT = new THREE.Color(0x86b45a);
-const COLOR_CROP_DARK = new THREE.Color(0x3f6b2f);
-const COLOR_PLOUGH = new THREE.Color(0x7a5c3a);
-const COLOR_DIRT = new THREE.Color(0x8a6b48); // scree / dirt transition band
-const COLOR_ROCK = new THREE.Color(PALETTE.rock);
+const COLOR_CROP_LIGHT = new THREE.Color(0x9ccb6a);
+const COLOR_CROP_DARK = new THREE.Color(0x568a3f);
+const COLOR_PLOUGH = new THREE.Color(0x9a7a50);
+const COLOR_DIRT = new THREE.Color(0xa3845c); // scree / dirt transition band
+const COLOR_ROCK = new THREE.Color(0x8a7a6d);
+const COLOR_WET_SAND = new THREE.Color(0xc2a06e); // damp band at the waterline
+// Aurora farmland patchwork tones (field parcels around the home strip).
+const COLOR_PLOUGH_FIELD = new THREE.Color(0x8a6a48); // warm ploughed rows
+const COLOR_WHEAT = new THREE.Color(0xe3bc5a); // golden wheat
+const COLOR_PASTURE = new THREE.Color(0x74b852); // bright green pasture
+const COLOR_FALLOW = new THREE.Color(0xb5b56e); // pale fallow / stubble
+const COLOR_HEDGE = new THREE.Color(0x47653a); // hedgerow edge lines
+const COLOR_PATH = new THREE.Color(0xb89a6e); // dirt paths between fields
 const TEMP_COLOR = new THREE.Color();
 
-function terrainVertexColor(height, slope, x, z, islandPeak, outColor) {
+// Field codes shared with terrain-tex.js terrainTileIndex.
+const FIELD_NONE = 0;
+const FIELD_PLOUGH = 1;
+const FIELD_WHEAT = 2;
+const FIELD_PASTURE = 3;
+const FIELD_FALLOW = 4;
+const FIELD_HEDGE = 5;
+const FIELD_PATH = 6;
+
+// Aurora farmland layout: deterministic rectangular parcels in
+// strip-local coordinates (aligned with the home strip, env5 read)
+// on the gentle lowland flats around Aurora Field. Visual only —
+// heights, strips and drop pads are untouched; parcels are kept
+// clear of every strip rectangle (+55 m margin, covering the 45 m
+// flatten blend) and every drop pad. Returns a FIELD_* code.
+const FIELD_CELL_ALONG = 150; // metres along the strip per parcel
+const FIELD_CELL_ACROSS = 115; // metres across the strip per parcel
+const FIELD_ZONE_RADIUS = 700; // metres from Aurora centre
+const FIELD_LANE_ACROSS = 95; // dirt lanes parallel to the strip
+const FIELD_LANE_HALF = 4.5;
+const FIELD_EDGE_BAND = 5.5; // hedgerow / path band width (m)
+function fieldAt(x, z, isAurora, height, slope) {
+  if (!isAurora) return FIELD_NONE;
+  if (height < 2.8 || height > 24 || slope > 0.18) return FIELD_NONE;
+  const centre = ISLANDS[0].centre;
+  const dcx = x - centre.x;
+  const dcz = z - centre.z;
+  if (dcx * dcx + dcz * dcz > FIELD_ZONE_RADIUS * FIELD_ZONE_RADIUS) return FIELD_NONE;
+  for (let s = 0; s < STRIPS.length; s++) {
+    if (stripRectangleDistance(STRIPS[s], x, z) < 55) return FIELD_NONE;
+  }
+  for (let p = 0; p < DROP_PADS.length; p++) {
+    const dx = x - DROP_PADS[p].x;
+    const dz = z - DROP_PADS[p].z;
+    if (dx * dx + dz * dz < (DROP_PAD_RADIUS + 30) * (DROP_PAD_RADIUS + 30)) return FIELD_NONE;
+  }
+  const strip = STRIPS[0];
+  const dx = x - strip.centre.x;
+  const dz = z - strip.centre.z;
+  const along = dx * strip.forward.x + dz * strip.forward.z;
+  const across = dx * strip.right.x + dz * strip.right.z;
+  // Dirt lanes parallel to the strip (env5 farm track read).
+  if (Math.abs(Math.abs(across) - FIELD_LANE_ACROSS) < FIELD_LANE_HALF
+      && Math.abs(along) < 430) return FIELD_PATH;
+  const cellAlong = Math.floor((along + 2000) / FIELD_CELL_ALONG);
+  const cellAcross = Math.floor((across + 2000) / FIELD_CELL_ACROSS);
+  const fracAlong = (along + 2000) / FIELD_CELL_ALONG - cellAlong;
+  const fracAcross = (across + 2000) / FIELD_CELL_ACROSS - cellAcross;
+  const edgeAlong = Math.min(fracAlong, 1 - fracAlong) * FIELD_CELL_ALONG;
+  const edgeAcross = Math.min(fracAcross, 1 - fracAcross) * FIELD_CELL_ACROSS;
+  const edgeDist = Math.min(edgeAlong, edgeAcross);
+  if (edgeDist < FIELD_EDGE_BAND) {
+    // Some parcel borders are dirt paths, the rest hedgerows.
+    const side = edgeAlong < edgeAcross ? 0 : 1;
+    const lanePick = hashLattice(cellAlong * 3 + side, cellAcross * 7, 991);
+    return lanePick < 0.38 ? FIELD_PATH : FIELD_HEDGE;
+  }
+  const pick = hashLattice(cellAlong, cellAcross, 7331);
+  if (pick < 0.28) return FIELD_PLOUGH;
+  if (pick < 0.52) return FIELD_WHEAT;
+  if (pick < 0.82) return FIELD_PASTURE;
+  return FIELD_FALLOW;
+}
+
+function terrainVertexColor(height, slope, x, z, islandPeak, field, outColor) {
   if (height < 0.4) {
     outColor.copy(COLOR_SEABED);
     return;
   }
-  if (height < 2.2) {
-    // Beach bands (visual_spec §7): pale foam fringe at the
-    // waterline, wet sand darkened below 1.2 m, dry sand above.
+  if (height < 2.6) {
+    // Beach bands: pale foam fringe at the waterline, a distinct
+    // wet-sand band just above it (darker, damper), dry sand above.
     // Vertex colour only — the shoreline geometry is unchanged.
-    outColor.copy(COLOR_SAND);
-    if (height < 0.8) outColor.lerp(COLOR_FOAM, 0.45);
-    else if (height < 1.2) outColor.multiplyScalar(0.9);
+    if (height < 0.9) {
+      outColor.copy(COLOR_WET_SAND);
+      outColor.lerp(COLOR_FOAM, 0.5);
+    } else if (height < 1.5) {
+      outColor.copy(COLOR_WET_SAND);
+    } else {
+      outColor.copy(COLOR_SAND);
+    }
     return;
   }
   // Lowland patchwork: a primary 200 m patch noise, a finer 48 m
@@ -922,26 +1016,38 @@ function terrainVertexColor(height, slope, x, z, islandPeak, outColor) {
   const patchNoise = fractalNoise(x / 200, z / 200, 555, 2);
   const detailNoise = fractalNoise(x / 48, z / 48, 913, 2);
   const toneNoise = fractalNoise(x / 620, z / 620, 271, 2);
+  // Macro variation: two low-frequency octaves so big areas vary
+  // (whole-island tone + 260 m lush/dry drift) instead of reading
+  // as one flat fill under the tiling detail texture.
+  const macroTone = fractalNoise(x / 900, z / 900, 881, 2);
+  const macroDry = fractalNoise(x / 260, z / 260, 613, 2);
   outColor.copy(COLOR_GRASS);
   outColor.lerp(COLOR_FIELD, smoothStep(0.52, 0.72, patchNoise));
   outColor.lerp(COLOR_SCRUB, smoothStep(0.48, 0.28, patchNoise) * 0.95);
-  // Dry harvested fields inside the mid band of the primary patch.
+  // Dry harvested fields inside the mid band of the primary patch,
+  // strengthened where the 260 m macro drift runs dry.
   outColor.lerp(COLOR_DRY_FIELD,
-    smoothStep(0.58, 0.85, detailNoise) * smoothStep(0.62, 0.45, patchNoise) * 0.8);
+    smoothStep(0.58, 0.85, detailNoise) * smoothStep(0.62, 0.45, patchNoise)
+    * (0.55 + 0.45 * macroDry) * 0.8);
   // Fine field/scrub flecks inside the big patches.
   outColor.lerp(COLOR_FIELD, smoothStep(0.62, 0.85, detailNoise) * 0.35);
   outColor.lerp(COLOR_SCRUB, smoothStep(0.38, 0.18, detailNoise) * 0.3);
   // Hedgerow darkening along the patch contour so field boundaries
   // read as patchwork edges from altitude.
   const contour = 1 - smoothStep(0.0, 0.06, Math.abs(patchNoise - 0.5));
-  if (contour > 0) outColor.multiplyScalar(1 - contour * 0.26);
-  // Large-scale tone swing across each island.
-  outColor.multiplyScalar(0.90 + 0.20 * toneNoise);
+  if (contour > 0) outColor.multiplyScalar(1 - contour * 0.12);
+  // Large-scale tone swing across each island. Round-2: amplitudes
+  // halved (was 0.90–1.10 and 0.88–1.12) — the wide macro drift was
+  // part of the wavy wood-grain read and crushed whole slopes dark.
+  outColor.multiplyScalar(0.96 + 0.08 * toneNoise);
+  outColor.multiplyScalar(0.95 + 0.1 * macroTone);
   // Rectangular field parcels on gentle lowland: a 170 m grid, each
   // cell hashed to a crop colour and hedgerow-darkened at its
   // edges, blended over the noise patchwork so fields read as
-  // distinct parcels while keeping organic variation.
-  if (slope < 0.25 && height > 3.6) {
+  // distinct parcels while keeping organic variation. Skipped
+  // inside the Aurora farmland layout (field != NONE), which has
+  // its own parcel colours below.
+  if (field === FIELD_NONE && slope < 0.25 && height > 3.6) {
     const CELL = 170;
     const cellX = Math.floor(x / CELL);
     const cellZ = Math.floor(z / CELL);
@@ -962,16 +1068,28 @@ function terrainVertexColor(height, slope, x, z, islandPeak, outColor) {
     const fracX = x / CELL - cellX;
     const fracZ = z / CELL - cellZ;
     const edgeDist = Math.min(fracX, 1 - fracX, fracZ, 1 - fracZ) * CELL;
-    if (edgeDist < 7) outColor.multiplyScalar(1 - 0.32 * (1 - edgeDist / 7));
+    if (edgeDist < 7) outColor.multiplyScalar(1 - 0.18 * (1 - edgeDist / 7));
   }
+  // Aurora farmland parcels: strong lerp toward the parcel colour
+  // (noise variation survives at 15%) so ploughed rows, wheat,
+  // pasture and fallow read as distinct fields from altitude,
+  // edged by dark hedgerows and dirt paths. The atlas tile for the
+  // same vertex is picked from the same field code, so colour and
+  // surface detail (furrows / straw / ruts) always agree.
+  if (field === FIELD_PLOUGH) outColor.lerp(COLOR_PLOUGH_FIELD, 0.85);
+  else if (field === FIELD_WHEAT) outColor.lerp(COLOR_WHEAT, 0.85);
+  else if (field === FIELD_PASTURE) outColor.lerp(COLOR_PASTURE, 0.8);
+  else if (field === FIELD_FALLOW) outColor.lerp(COLOR_FALLOW, 0.8);
+  else if (field === FIELD_HEDGE) outColor.lerp(COLOR_HEDGE, 0.9);
+  else if (field === FIELD_PATH) outColor.lerp(COLOR_PATH, 0.9);
   // Feather the sand rim into the lowlands so the beach does not
   // end on a single vertex row.
-  const sandFade = smoothStep(2.2, 3.6, height);
+  const sandFade = smoothStep(2.6, 4.2, height);
   if (sandFade < 1) outColor.lerp(COLOR_SAND, 1 - sandFade);
   // Rock on steep slopes and high ground; the bands start low
   // enough that the sand -> grass -> rock layering reads from
   // altitude.
-  const rockBySlope = smoothStep(0.4, 0.8, slope);
+  const rockBySlope = smoothStep(0.38, 0.75, slope);
   const rockByHeight = smoothStep(islandPeak * 0.48, islandPeak * 0.78, height);
   const rockAmount = Math.max(rockBySlope, rockByHeight);
   // Mid slopes pass through bare dirt before rock, so the sequence
@@ -982,16 +1100,19 @@ function terrainVertexColor(height, slope, x, z, islandPeak, outColor) {
   if (rockAmount > 0) outColor.lerp(COLOR_ROCK, rockAmount);
   // Rock strata: alternating shade bands by height on steep faces,
   // faded in with the rock amount so grass lowlands stay unbanded,
-  // with a dark seam every third band.
+  // with a faint seam every third band. Round-2: contrast cut hard
+  // (was 0.85 bands + 0.12 seam) — at 5 m spacing the old bands read
+  // as topographic contour lines across every slope.
   if (rockAmount > 0.35) {
     const bandIndex = Math.floor(height / 5);
-    const bandShade = bandIndex % 2 === 0 ? 1.0 : 0.85;
+    const bandShade = bandIndex % 2 === 0 ? 1.0 : 0.96;
     outColor.multiplyScalar(1 + (bandShade - 1) * rockAmount);
-    if (bandIndex % 3 === 0) outColor.multiplyScalar(1 - 0.12 * rockAmount);
+    if (bandIndex % 3 === 0) outColor.multiplyScalar(1 - 0.03 * rockAmount);
   }
-  // Per-vertex variation so flat facets read individually, lifted
-  // because the 9° sun leaves up-facing ground dim.
-  const facetShade = 1.04 + 0.14 * hashLattice(Math.round(x / 17), Math.round(z / 17), 31);
+  // Per-vertex variation so the ground does not read as one flat
+  // fill, lifted because the 9° sun leaves up-facing ground dim.
+  // Amplitude trimmed for smooth shading (was 1.04 + 0.14·hash).
+  const facetShade = 1.03 + 0.1 * hashLattice(Math.round(x / 17), Math.round(z / 17), 31);
   outColor.multiplyScalar(facetShade);
 }
 
@@ -1019,6 +1140,13 @@ function buildIslandTerrain(island) {
     positions.setY(i, h);
   }
   // Slope from the height grid itself (no extra heightAt calls).
+  // Field codes are resolved once here and reused by the UV pass so
+  // vertex colour and atlas tile always agree. Baked vertex AO:
+  // concavities (vertex below its neighbours) and steep faces are
+  // darkened so gullies and crevices read with depth. Colour only —
+  // positions and heights are exactly as before.
+  const isAurora = island === ISLANDS[0];
+  const fields = new Uint8Array(vertexCount);
   for (let i = 0; i < vertexCount; i++) {
     const gx = i % gridSide;
     const gz = Math.floor(i / gridSide);
@@ -1027,10 +1155,18 @@ function buildIslandTerrain(island) {
     const hU = heights[Math.max(0, gz - 1) * gridSide + gx];
     const hD = heights[Math.min(segments, gz + 1) * gridSide + gx];
     const slope = Math.sqrt((hR - hL) * (hR - hL) + (hD - hU) * (hD - hU)) / (2 * step);
-    terrainVertexColor(
-      heights[i], slope,
-      positions.getX(i) + island.centre.x, positions.getZ(i) + island.centre.z,
-      island.peak, TEMP_COLOR);
+    const wx = positions.getX(i) + island.centre.x;
+    const wz = positions.getZ(i) + island.centre.z;
+    const field = fieldAt(wx, wz, isAurora, heights[i], slope);
+    fields[i] = field;
+    terrainVertexColor(heights[i], slope, wx, wz, island.peak, field, TEMP_COLOR);
+    const neighbourAvg = (hL + hR + hU + hD) * 0.25;
+    const concavity = neighbourAvg - heights[i]; // >0 in dips/gullies
+    // Round-2: AO depth cut (was −26% concavity, −12% slope) — the
+    // old bake crushed every slope and gully to mud under the low sun.
+    let ao = 1 - Math.min(0.1, Math.max(-0.02, concavity * 0.05));
+    ao *= 1 - Math.min(0.05, slope * 0.05);
+    TEMP_COLOR.multiplyScalar(ao);
     colors[i * 3] = TEMP_COLOR.r;
     colors[i * 3 + 1] = TEMP_COLOR.g;
     colors[i * 3 + 2] = TEMP_COLOR.b;
@@ -1054,7 +1190,7 @@ function buildIslandTerrain(island) {
     const wz = positions.getZ(i) + island.centre.z;
     const patch = fractalNoise(wx / 200, wz / 200, 555, 2);
     const detail = fractalNoise(wx / 48, wz / 48, 913, 2);
-    const tile = terrainTileIndex(heights[i], slope, patch, detail, island.peak);
+    const tile = terrainTileIndex(heights[i], slope, patch, detail, island.peak, fields[i]);
     terrainAtlasUV(wx, wz, tile, uvOut);
     uvs[i * 2] = uvOut[0];
     uvs[i * 2 + 1] = uvOut[1];
@@ -1933,53 +2069,68 @@ function buildTrees() {
   }
   const group = new THREE.Group();
   group.name = 'pine-trees';
-  const trunkGeometry = new THREE.CylinderGeometry(0.16, 0.26, 2.2, 5);
-  trunkGeometry.translate(0, 1.1, 0);
-  // Two-tier pine so trees read as pines instead of spikes at judge
-  // size, in the same single InstancedMesh/draw. Total height
-  // 6.5 m still matches the obstacleTrees strike height (6.5 ×
-  // scale) flight.js uses, so drawn height = collision height.
-  const lowerTier = new THREE.ConeGeometry(1.7, 3.2, 6);
-  lowerTier.translate(0, 3.6, 0);
-  const upperTier = new THREE.ConeGeometry(1.15, 2.6, 6);
-  upperTier.translate(0, 5.2, 0);
-  const foliageGeometry = mergeStaticGeometries([lowerTier, upperTier]);
-  const trunks = new THREE.InstancedMesh(trunkGeometry, MAT.trunk, placements.length);
-  const foliage = new THREE.InstancedMesh(foliageGeometry, MAT.pine, placements.length);
-  // Per-instance variation (visual only): a foliage tint in the
-  // pine family for every tree, plus non-uniform scale tiers for
-  // NON-obstacle trees. Obstacle trees keep their exact uniform
-  // scale so the drawn height always matches the obstacleTrees
-  // height flight.js strikes against. A separate rng keeps the
-  // placement sequence identical to the frozen build.
+  // Visual upgrade: layered conifers + round deciduous from
+  // vegetation.js replace the old trunk + two-cone pine. Drawn height
+  // still equals the obstacleTrees strike height (6.5 × scale)
+  // flight.js uses: instance scale is multiplied by
+  // 6.5 / geometry height, so collision height is unchanged.
+  // Obstacle trees stay conifers with exact uniform scale;
+  // non-obstacle forest mixes in deciduous (visual only).
   const obstacleKeys = new Set(obstacleTrees.map((t) => t.x + ',' + t.z));
-  const variationRng = seededRandom(4451);
-  for (let i = 0; i < placements.length; i++) {
-    const tree = placements[i];
-    TEMP_POSITION.set(tree.x, tree.y, tree.z);
-    TEMP_EULER.set(0, tree.yaw, 0);
-    TEMP_QUATERNION.setFromEuler(TEMP_EULER);
-    if (obstacleKeys.has(tree.x + ',' + tree.z)) {
-      TEMP_SCALE.set(tree.scale, tree.scale, tree.scale);
+  const kindRng = seededRandom(4452);
+  const coniferPlacements = [];
+  const deciduousPlacements = [];
+  for (const tree of placements) {
+    if (obstacleKeys.has(tree.x + ',' + tree.z) || kindRng() < 0.65) {
+      coniferPlacements.push(tree);
     } else {
-      const wide = tree.scale * (0.9 + variationRng() * 0.3);
-      const tall = tree.scale * (0.82 + variationRng() * 0.45);
-      TEMP_SCALE.set(wide, tall, wide);
+      deciduousPlacements.push(tree);
     }
-    TEMP_MATRIX.compose(TEMP_POSITION, TEMP_QUATERNION, TEMP_SCALE);
-    trunks.setMatrixAt(i, TEMP_MATRIX);
-    foliage.setMatrixAt(i, TEMP_MATRIX);
-    const tint = 0.8 + variationRng() * 0.38;
-    TEMP_COLOR.setRGB(
-      tint * (0.9 + variationRng() * 0.14), tint, tint * (0.86 + variationRng() * 0.14));
-    foliage.setColorAt(i, TEMP_COLOR);
   }
-  trunks.instanceMatrix.needsUpdate = true;
-  foliage.instanceMatrix.needsUpdate = true;
-  if (foliage.instanceColor) foliage.instanceColor.needsUpdate = true;
-  foliage.castShadow = true;
-  group.add(trunks);
-  group.add(foliage);
+  const variationRng = seededRandom(4451);
+  function buildTreeInstances(list, geometry, kind, geometryHeight) {
+    const mesh = new THREE.InstancedMesh(geometry, createTreeMaterial(kind), list.length);
+    mesh.customDepthMaterial = createTreeDepthMaterial(kind);
+    const heightFactor = 6.5 / geometryHeight;
+    for (let i = 0; i < list.length; i++) {
+      const tree = list[i];
+      TEMP_POSITION.set(tree.x, tree.y, tree.z);
+      TEMP_EULER.set(0, tree.yaw, 0);
+      TEMP_QUATERNION.setFromEuler(TEMP_EULER);
+      if (obstacleKeys.has(tree.x + ',' + tree.z)) {
+        const s = tree.scale * heightFactor;
+        TEMP_SCALE.set(s, s, s);
+      } else {
+        const wide = tree.scale * (0.9 + variationRng() * 0.3) * heightFactor;
+        const tall = tree.scale * (0.82 + variationRng() * 0.45) * heightFactor;
+        TEMP_SCALE.set(wide, tall, wide);
+      }
+      TEMP_MATRIX.compose(TEMP_POSITION, TEMP_QUATERNION, TEMP_SCALE);
+      mesh.setMatrixAt(i, TEMP_MATRIX);
+      if (kind === 'conifer') {
+        const tint = 0.8 + variationRng() * 0.38;
+        TEMP_COLOR.setRGB(
+          tint * (0.9 + variationRng() * 0.14), tint, tint * (0.86 + variationRng() * 0.14));
+      } else {
+        // Deciduous vertex colours are pale; instanceColor carries hue
+        // (greens, yellow-greens, occasional gold/autumn like env4).
+        const pick = variationRng();
+        if (pick < 0.55) TEMP_COLOR.setHSL(0.26 + variationRng() * 0.06, 0.5, 0.42 + variationRng() * 0.14);
+        else if (pick < 0.8) TEMP_COLOR.setHSL(0.16 + variationRng() * 0.05, 0.55, 0.45 + variationRng() * 0.12);
+        else if (pick < 0.92) TEMP_COLOR.setHSL(0.1 + variationRng() * 0.03, 0.6, 0.45);
+        else TEMP_COLOR.setHSL(0.03 + variationRng() * 0.03, 0.55, 0.4);
+      }
+      mesh.setColorAt(i, TEMP_COLOR);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = true;
+    return mesh;
+  }
+  group.add(buildTreeInstances(coniferPlacements, buildConiferGeometry(), 'conifer', CONIFER_HEIGHT));
+  if (deciduousPlacements.length > 0) {
+    group.add(buildTreeInstances(deciduousPlacements, buildDeciduousGeometry(), 'deciduous', DECIDUOUS_HEIGHT));
+  }
   return { group, obstacleTrees, count: placements.length };
 }
 
@@ -2889,6 +3040,16 @@ function buildWorld(scene) {
       heightAt, terrainSlopeAt, obstacleTrees: trees.obstacleTrees,
     }).group);
   } catch (error) { /* vegetation is scenery only */ }
+  // DENSE: river + structures density layer (visual only, scenery).
+  try {
+    worldGroup.add(buildRiver({ islands: ISLANDS, strips: STRIPS, heightAt }));
+  } catch (error) { /* river is scenery only */ }
+  try {
+    worldGroup.add(buildStructuresDense({
+      islands: ISLANDS, strips: STRIPS, dropPads: DROP_PADS,
+      heightAt, terrainSlopeAt,
+    }));
+  } catch (error) { /* structures are scenery only */ }
   worldGroup.add(buildFences(homeStrip));
   worldGroup.add(buildRoads()); // VD6-LOOK: merged island roads (1 draw)
   try { worldGroup.add(buildVillages()); } catch (error) { /* villages are scenery only */ }
@@ -2907,6 +3068,12 @@ function buildWorld(scene) {
       heightAt,
       seaLevel: SEA_LEVEL,
       flockSpots,
+      // Visual upgrade: landmark dressing (lighthouse halo, water-tower
+      // fence/bales/AO) — world-dressing.js owns the layer.
+      landmarks: {
+        lighthouse: { position: lighthouse.position },
+        waterTower: { position: waterTower.position },
+      },
     });
     worldGroup.add(worldDressing.group);
   } catch (error) {

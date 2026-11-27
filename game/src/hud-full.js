@@ -1,4 +1,7 @@
 // AURORA POST — HUD FULL (new glass HUD, replaces round-dial concept HUD).
+// HUD-V2 MERGED (hud-full-v2.js): top.js base (Zones 1–3 refined) +
+// center.js drawGuidance (Zone 4) + tapes.js drawSpeedTape/drawAltTape
+// (Zones 5–6) + bottom.js Blocks A/B/C (Zones 7–9). Pair with hud-v2.css.
 // Pure view: every displayed value comes from the flightState object `fs`
 // passed to update(). This module never reads sim/plane/mission state.
 // Spec: hud-spec-fa.md (2026-11-27) + hud-target-full.png.
@@ -114,7 +117,7 @@ export function createFullHud(rootEl) {
   const windPanel = panel(tlRow2, 'hf-wind-panel');
   screws(windPanel);
   const windArrow = el('span', 'hf-wind-arrow');
-  windArrow.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 12 L18 12 M13 6 L19 12 L13 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  windArrow.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12 L18 12 M13 6 L19 12 L13 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const windTextBox = el('span', 'hf-wind-textbox');
   windTextBox.appendChild(el('span', 'hf-label', 'WIND'));
   const windValue = el('span', 'hf-value', '270° / 6 kt');
@@ -137,13 +140,22 @@ export function createFullHud(rootEl) {
   /* ZONE 2: TOP-CENTRE — score capsule + mission card */
   const zTC = zone('hf-tc');
   const capsule = panel(zTC, 'hf-capsule');
+  // Refined to target: clock glyph + time, SCORE label over number,
+  // amber combo. Outer classes unchanged (hf-cap-time/-score/-combo);
+  // score splits into label + value spans for the two-tone look.
+  const capClock = el('span', 'hf-cap-clock');
+  capClock.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5 V12 L15.5 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   const capTime = el('span', 'hf-cap-time', '00:00');
-  const capScore = el('span', 'hf-cap-score', 'SCORE 0');
+  const capScore = el('span', 'hf-cap-score');
+  capScore.appendChild(el('span', 'hf-cap-score-label', 'SCORE'));
+  const capScoreValue = el('span', 'hf-cap-score-value', '0');
+  capScore.appendChild(capScoreValue);
   const capCombo = el('span', 'hf-cap-combo', 'x1.0 COMBO');
+  capsule.appendChild(capClock);
   capsule.appendChild(capTime);
-  capsule.appendChild(el('span', 'hf-cap-sep', '·'));
+  capsule.appendChild(el('span', 'hf-cap-sep', ''));
   capsule.appendChild(capScore);
-  capsule.appendChild(el('span', 'hf-cap-sep', '·'));
+  capsule.appendChild(el('span', 'hf-cap-sep', ''));
   capsule.appendChild(capCombo);
   const missionCard = panel(zTC, 'hf-mission-card');
   screws(missionCard);
@@ -185,7 +197,7 @@ export function createFullHud(rootEl) {
   destCard.appendChild(destDist);
   destCard.appendChild(destEta);
 
-  /* ZONE 4: CENTRE GUIDANCE — FPM, pitch ladder, bank arc, GS/LOC, chevrons (canvas) */
+  /* ZONE 4: CENTRE GUIDANCE — simplified: horizon, pitch steps, bank arc, FPM, GS/LOC diamonds (canvas) */
   const zC = zone('hf-centre');
   const guideCanvas = canvasIn(zC, 'hf-guide-canvas');
 
@@ -231,17 +243,28 @@ export function createFullHud(rootEl) {
   const pryCard = panel(zBL, 'hf-pry-card');
   const pryRows = {};
   for (const [k, label] of [['pitch', 'PITCH'], ['roll', 'ROLL'], ['yaw', 'YAW']]) {
-    const row = el('div', 'hf-kv');
-    row.appendChild(el('span', 'hf-label hf-cyan', label));
-    const v = el('span', 'hf-value', '+0.0°');
-    row.appendChild(v);
+    const row = el('div', 'hf-pry-row hf-pry-' + k);
+    const bar = el('span', 'hf-pry-bar');
+    const stack = el('span', 'hf-pry-stack');
+    stack.appendChild(el('span', 'hf-label', label));
+    const v = el('span', 'hf-value hf-pry-value', '+0.0°');
+    stack.appendChild(v);
+    row.appendChild(bar);
+    row.appendChild(stack);
     pryCard.appendChild(row);
-    pryRows[k] = v;
+    pryRows[k] = { row, bar, value: v };
   }
 
-  /* ZONE 8: BOTTOM-CENTRE — system chips + destination bar (ONLY dest bar) */
+  /* ZONE 8: BOTTOM-CENTRE — systems dock + guide strip */
   const zBC = zone('hf-bc');
   const sysRow = el('div', 'hf-sys-row');
+  const SYS_ICONS = {
+    flaps: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 3.5v17M12 3.5v12M12 15.5l7.5-4M12 20.5l5-2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="4.6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 6.8v6.7M5.5 13.5h13M8 13.5v4M16 13.5v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="6.4" y="17.5" width="3.2" height="3" rx="1" fill="currentColor"/><rect x="14.4" y="17.5" width="3.2" height="3" rx="1" fill="currentColor"/></svg>',
+    brakes: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    lights: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    spoilers: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 17.5L19 8.5M13.5 11.8L15 5.5l4.5 1.2-1.6 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
   function sysChip(label) {
     const c = panel(sysRow, 'hf-sys-chip');
     c.appendChild(el('div', 'hf-label', label));
@@ -249,11 +272,25 @@ export function createFullHud(rootEl) {
     c.appendChild(v);
     return { chip: c, value: v };
   }
+  function sysIcon(chipObj, key) {
+    const ic = el('span', 'hf-sys-icon hf-sys-icon-' + key);
+    ic.innerHTML = SYS_ICONS[key];
+    chipObj.chip.insertBefore(ic, chipObj.chip.firstChild);
+    return ic;
+  }
   const flapsChip = sysChip('FLAPS');
   const gearChip = sysChip('GEAR');
   const brakesChip = sysChip('BRAKES');
   const lightsChip = sysChip('LIGHTS');
   const spoilersChip = sysChip('SPOILERS');
+  sysIcon(flapsChip, 'flaps');
+  sysIcon(gearChip, 'gear');
+  sysIcon(brakesChip, 'brakes');
+  sysIcon(lightsChip, 'lights');
+  sysIcon(spoilersChip, 'spoilers');
+  const gearDots = el('span', 'hf-gear-dots');
+  for (let i = 0; i < 3; i++) gearDots.appendChild(el('span', 'hf-gear-dot'));
+  gearChip.chip.appendChild(gearDots);
   zBC.appendChild(sysRow);
   const destBar = panel(zBC, 'hf-dest-bar');
   const destBarText = el('div', 'hf-dest-bar-text', '▲ —');
@@ -263,49 +300,59 @@ export function createFullHud(rootEl) {
   destBar.appendChild(destBarText);
   destBar.appendChild(destProgress);
 
-  /* ZONE 9: BOTTOM-RIGHT — throttle/RPM/fuel/oil/G/trim + systems strip + caution */
+  /* ZONE 9: BOTTOM-RIGHT — throttle/fuel bars, telemetry grid, systems strip */
   const zBR = zone('hf-br');
   const engPanel = panel(zBR, 'hf-eng-panel');
-  screws(engPanel);
   const thrRow = el('div', 'hf-eng-row hf-thr-row');
-  thrRow.appendChild(el('span', 'hf-label hf-cyan', 'THROTTLE'));
+  const thrHead = el('div', 'hf-eng-head');
+  thrHead.appendChild(el('span', 'hf-label', 'THROTTLE'));
+  const thrPct = el('span', 'hf-value hf-eng-pct', '0%');
+  thrHead.appendChild(thrPct);
+  thrRow.appendChild(thrHead);
   const thrBar = el('span', 'hf-thr-bar');
   const thrFill = el('span', 'hf-thr-fill');
   thrBar.appendChild(thrFill);
   thrRow.appendChild(thrBar);
-  const thrPct = el('span', 'hf-value', '0%');
-  thrRow.appendChild(thrPct);
   engPanel.appendChild(thrRow);
-  function engRow(label, cls) {
-    const row = el('div', 'hf-eng-row' + (cls ? ' ' + cls : ''));
-    row.appendChild(el('span', 'hf-label hf-cyan', label));
+  const fuelBlock = el('div', 'hf-eng-row hf-fuel-row');
+  const fuelHead = el('div', 'hf-eng-head');
+  fuelHead.appendChild(el('span', 'hf-label', 'FUEL'));
+  const fuelValue = el('span', 'hf-value hf-eng-pct', '—');
+  fuelHead.appendChild(fuelValue);
+  fuelBlock.appendChild(fuelHead);
+  const fuelBar = el('span', 'hf-fuel-bar');
+  const fuelFill = el('span', 'hf-fuel-fill');
+  fuelBar.appendChild(fuelFill);
+  fuelBlock.appendChild(fuelBar);
+  engPanel.appendChild(fuelBlock);
+  const fuelRow = { row: fuelBlock, value: fuelValue };
+  const engGrid = el('div', 'hf-eng-grid');
+  function engCell(label) {
+    const cell = el('div', 'hf-eng-cell');
+    cell.appendChild(el('span', 'hf-label', label));
     const v = el('span', 'hf-value hf-eng-value', '—');
-    row.appendChild(v);
-    engPanel.appendChild(row);
-    return { row, value: v };
+    cell.appendChild(v);
+    engGrid.appendChild(cell);
+    return { row: cell, value: v };
   }
-  const rpmRow = engRow('RPM');
-  const fuelRow = engRow('FUEL');
-  const flowOilRow = el('div', 'hf-eng-row hf-eng-row-split');
-  flowOilRow.appendChild(el('span', 'hf-label hf-cyan', 'FUEL FLOW'));
-  const flowValue = el('span', 'hf-value', '— L/h');
-  flowOilRow.appendChild(flowValue);
-  flowOilRow.appendChild(el('span', 'hf-label hf-cyan', 'OIL'));
-  const oilValue = el('span', 'hf-value', '—°C');
-  flowOilRow.appendChild(oilValue);
-  engPanel.appendChild(flowOilRow);
-  const gTrimRow = el('div', 'hf-eng-row hf-eng-row-split');
-  gTrimRow.appendChild(el('span', 'hf-label hf-cyan', 'G-LOAD'));
-  const gValue = el('span', 'hf-value', '1.00 g');
-  gTrimRow.appendChild(gValue);
-  gTrimRow.appendChild(el('span', 'hf-label hf-cyan', 'TRIM'));
-  const trimValue = el('span', 'hf-value', '+0.0');
-  gTrimRow.appendChild(trimValue);
-  engPanel.appendChild(gTrimRow);
+  const rpmRow = engCell('RPM');
+  const flowCell = engCell('FUEL FLOW');
+  const gCell = engCell('G-LOAD');
+  const acirCell = engCell('ACIR');
+  const oilCell = engCell('OIL');
+  const trimCell = engCell('TRIM');
+  const flowValue = flowCell.value;
+  const gValue = gCell.value;
+  const acirValue = acirCell.value;
+  const oilValue = oilCell.value;
+  const trimValue = trimCell.value;
+  engPanel.appendChild(engGrid);
   const sysStrip = el('div', 'hf-sys-strip');
   const sysStripText = el('span', 'hf-sys-strip-text', 'ALL SYSTEMS NOMINAL');
+  const sysCheck = el('span', 'hf-sys-check', '✓');
   const cautionChip = el('span', 'hf-caution-chip', '');
   sysStrip.appendChild(sysStripText);
+  sysStrip.appendChild(sysCheck);
   sysStrip.appendChild(cautionChip);
   engPanel.appendChild(sysStrip);
 
@@ -370,7 +417,10 @@ export function createFullHud(rootEl) {
   function glow(ctx, colour, blur) { ctx.shadowColor = colour; ctx.shadowBlur = blur; }
   function noGlow(ctx) { ctx.shadowBlur = 0; }
 
-  /* ZONE 3 painter: heading tape (ticks 5°, labels 30° as 330/000/030) */
+  /* ZONE 3 painter: heading tape (ticks 5°, labels 30° as 090/120/150).
+     Refined to target: bare tape (no panel box in CSS), labels above a
+     thin baseline, ticks hanging below it, nearest 30° label in cyan,
+     cyan triangle marker under the line at centre. */
   function drawHeading(headingDeg) {
     const { ctx, w, h } = HDG;
     if (!ctx || w < 10) return;
@@ -380,9 +430,19 @@ export function createFullHud(rootEl) {
     ctx.clearRect(0, 0, w, h);
     const pxPerDeg = w / 100; // ±50° visible
     const cx = w / 2;
+    const lineY = h - 14; // baseline; labels above, marker below
+    // baseline
+    ctx.strokeStyle = 'rgba(62,242,255,0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, lineY);
+    ctx.lineTo(w, lineY);
+    ctx.stroke();
     ctx.font = '700 11px ' + FONT_STACK;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+    ctx.textBaseline = 'bottom';
+    // nearest 30° label (highlighted cyan, as 120 in the target)
+    const nearest30 = wrap360(Math.round(headingDeg / 30) * 30);
     const start = Math.floor((headingDeg - 55) / 5) * 5;
     for (let d = start; d <= headingDeg + 55; d += 5) {
       const x = cx + (d - headingDeg) * pxPerDeg;
@@ -390,51 +450,55 @@ export function createFullHud(rootEl) {
       const wrapped = wrap360(d);
       const is30 = Math.round(wrapped) % 30 === 0;
       const is10 = Math.round(wrapped) % 10 === 0;
-      const tickH = is30 ? 10 : is10 ? 7 : 4;
-      ctx.strokeStyle = is30 ? COL.white : 'rgba(255,255,255,0.55)';
-      ctx.lineWidth = 1.5;
+      const tickH = is30 ? 9 : is10 ? 6 : 3.5;
+      ctx.strokeStyle = is30 ? COL.cyan : 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(x, h - 2);
-      ctx.lineTo(x, h - 2 - tickH);
+      ctx.moveTo(x, lineY);
+      ctx.lineTo(x, lineY + tickH);
       ctx.stroke();
       if (is30) {
-        ctx.fillStyle = COL.white;
-        ctx.fillText(pad3(wrapped), x, 2);
+        const hot = Math.round(wrapped) === Math.round(nearest30);
+        ctx.fillStyle = hot ? COL.cyan : 'rgba(255,255,255,0.82)';
+        ctx.fillText(pad3(wrapped), x, lineY - 4);
       }
     }
-    // centre caret
-    glow(ctx, COL.cyan, 5);
+    // centre marker: cyan triangle below the line, point up
+    glow(ctx, COL.cyan, 6);
     ctx.fillStyle = COL.cyan;
     ctx.beginPath();
-    ctx.moveTo(cx - 6, h - 14);
-    ctx.lineTo(cx + 6, h - 14);
-    ctx.lineTo(cx, h - 5);
+    ctx.moveTo(cx - 6, lineY + 11);
+    ctx.lineTo(cx + 6, lineY + 11);
+    ctx.lineTo(cx, lineY + 3);
     ctx.closePath();
     ctx.fill();
     noGlow(ctx);
-    // edge fades
-    const fadeL = ctx.createLinearGradient(0, 0, 26, 0);
-    fadeL.addColorStop(0, 'rgba(10,14,22,0.9)');
+    // soft edge fades (tape sits on bare sky, keep them light)
+    const fadeL = ctx.createLinearGradient(0, 0, 30, 0);
+    fadeL.addColorStop(0, 'rgba(10,14,22,0.55)');
     fadeL.addColorStop(1, 'rgba(10,14,22,0)');
     ctx.fillStyle = fadeL;
-    ctx.fillRect(0, 0, 26, h);
-    const fadeR = ctx.createLinearGradient(w, 0, w - 26, 0);
-    fadeR.addColorStop(0, 'rgba(10,14,22,0.9)');
+    ctx.fillRect(0, 0, 30, h);
+    const fadeR = ctx.createLinearGradient(w, 0, w - 30, 0);
+    fadeR.addColorStop(0, 'rgba(10,14,22,0.55)');
     fadeR.addColorStop(1, 'rgba(10,14,22,0)');
     ctx.fillStyle = fadeR;
-    ctx.fillRect(w - 26, 0, 26, h);
+    ctx.fillRect(w - 30, 0, 30, h);
   }
 
-  /* ZONE 4 painter: centre guidance (ladder, bank arc, FPM, GS/LOC, chevrons) */
+  /* ZONE 4 painter: centre guidance, simplified (horizon, pitch steps, bank arc, FPM, GS/LOC diamonds) */
   function drawGuidance(fs) {
     const { ctx, w, h } = GUIDE;
     if (!ctx || w < 40) return;
     const pitch = sm.pitch, roll = sm.roll;
     const fpm = fs.fpm || {};
+    // Camera-mode label on the horizon line (reference: CHASE pill).
+    // Producer may send any of these fields; default matches the target.
+    const camLabel = String(fs.cameraLabel || fs.cameraMode || fs.viewLabel || fs.viewMode || 'CHASE');
     const key = [Math.round(pitch * 5), Math.round(roll * 5),
       Math.round(num(fpm.xDeg, 0) * 5), Math.round(num(fpm.yDeg, 0) * 5),
       Math.round(num(fs.glideslopeDev, 0) * 40), Math.round(num(fs.localizerDev, 0) * 40),
-      fs.onPath || 'none', w + 'x' + h].join(':');
+      fs.onPath || 'none', camLabel, w + 'x' + h].join(':');
     if (key === GUIDE.key) return;
     GUIDE.key = key;
     ctx.clearRect(0, 0, w, h);
@@ -473,144 +537,152 @@ export function createFullHud(rootEl) {
       ctx.fillText(text, x, y);
     }
 
+    // Simplified centre (2026-11-28 user order): minimal ink — a short
+    // horizon reference, two unlabelled pitch steps, a slim bank arc,
+    // the FPV and the camera label as plain text. White ladder, cyan
+    // only on the horizon, bank marker and FPV.
+    const WHITE = 'rgba(255,255,255,0.85)';
+    const WHITE_DIM = 'rgba(255,255,255,0.45)';
+    const ls = clamp(w / 620, 0.78, 1.12); // ladder width scale (620px = design width)
+    // Camera label metrics (small gap in the horizon line for the text).
+    ctx.font = '600 9px ' + FONT_STACK;
+    const labelW = Math.ceil(ctx.measureText(camLabel).width);
+    const horizonGap = labelW / 2 + 5;
+
     // --- pitch ladder (rotates with roll, slides with pitch) ---
+    // Two unlabelled steps only (±10 wider than ±5), no minors.
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(-rollRad);
-    ctx.font = '700 11px ' + FONT_STACK;
-    ctx.textBaseline = 'middle';
     for (const deg of [-10, -5, 5, 10]) {
       const y = -(deg - pitch) * pxPerDeg;
       if (Math.abs(y) > h * 0.62) continue;
-      const half = deg % 10 === 0 ? 58 : 44;
-      const gap = 14;
-      ctx.setLineDash(deg < 0 ? [7, 5] : []);
+      const half = (deg % 10 === 0 ? 46 : 34) * ls;
+      const gap = 12 * ls;
       ctx.beginPath();
       ctx.moveTo(-half, y); ctx.lineTo(-gap, y);
       ctx.moveTo(gap, y); ctx.lineTo(half, y);
-      strokeOut(COL.cyan, 1.5, 4);
-      ctx.setLineDash([]);
-      const label = (deg > 0 ? '+' : '') + deg;
-      ctx.textAlign = 'right';
-      textOut(label, -half - 5, y, COL.cyan);
-      ctx.textAlign = 'left';
-      textOut(label, half + 5, y, COL.cyan);
+      strokeOut(WHITE_DIM, 1, 0);
     }
-    // horizon line (0°) — longer, with centre gap
+    // horizon line (0°) — cyan, short, small centre gap for the label
     const hy = pitch * pxPerDeg;
+    const horizonHalf = 72 * ls;
     if (Math.abs(hy) < h * 0.62) {
       ctx.beginPath();
-      ctx.moveTo(-86, hy); ctx.lineTo(-16, hy);
-      ctx.moveTo(16, hy); ctx.lineTo(86, hy);
-      strokeOut(COL.cyan, 1.5, 4);
+      ctx.moveTo(-horizonHalf, hy); ctx.lineTo(-horizonGap, hy);
+      ctx.moveTo(horizonGap, hy); ctx.lineTo(horizonHalf, hy);
+      strokeOut(COL.cyan, 1.25, 4);
     }
     ctx.restore();
 
+    // --- camera-mode label on the horizon line (plain text, no pill) ---
+    // Drawn upright at the horizon's centre point so it stays readable
+    // in a bank while tracking the line.
+    if (Math.abs(hy) < h * 0.62) {
+      const hx = cx + hy * Math.sin(rollRad);
+      const hyS = cy + hy * Math.cos(rollRad);
+      ctx.font = '600 9px ' + FONT_STACK;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      textOut(camLabel, hx, hyS + 0.5, 'rgba(255,255,255,0.8)');
+    }
+
     // --- bank arc (fixed scale, pointer rolls) ---
-    const arcR = Math.min(w, h) * 0.36;
+    // Slim version: short ±60° arc, ticks only at 0/±30/±60, small
+    // fixed cyan apex marker, roll pointer just inside the arc
+    // (amber/red past 30°/45° of bank).
+    const arcR = Math.min(w, h) * 0.30;
     const arcCy = cy + arcR * 0.28;
     const absRoll = Math.abs(roll);
-    const bankCol = absRoll > 45 ? COL.red : absRoll > 30 ? COL.amber : COL.cyan;
+    const ptrCol = absRoll > 45 ? COL.red : absRoll > 30 ? COL.amber : WHITE;
     ctx.beginPath();
-    ctx.arc(cx, arcCy, arcR, Math.PI * 1.22, Math.PI * 1.78);
-    strokeOut(bankCol, 1.5, 4);
+    ctx.arc(cx, arcCy, arcR, -Math.PI / 2 - Math.PI / 3, -Math.PI / 2 + Math.PI / 3);
+    strokeOut(WHITE_DIM, 1, 0);
     ctx.beginPath();
-    for (const deg of [-45, -30, -20, -10, 0, 10, 20, 30, 45]) {
+    for (const deg of [-60, -30, 0, 30, 60]) {
       const a = -Math.PI / 2 + (deg * Math.PI) / 180;
-      const len = deg === 0 ? 12 : Math.abs(deg) % 30 === 0 ? 10 : 6;
+      const len = deg === 0 ? 9 : 6;
       ctx.moveTo(cx + Math.cos(a) * arcR, arcCy + Math.sin(a) * arcR);
       ctx.lineTo(cx + Math.cos(a) * (arcR - len), arcCy + Math.sin(a) * (arcR - len));
     }
-    strokeOut(bankCol, 1.5, 4);
-    // roll pointer (triangle at current roll)
-    const pa = -Math.PI / 2 + rollRad;
-    const px = cx + Math.cos(pa) * (arcR - 16);
-    const py = arcCy + Math.sin(pa) * (arcR - 16);
+    strokeOut(WHITE, 1, 0);
+    // fixed apex marker (cyan, points down at the arc)
+    const apexY = arcCy - arcR;
     ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px + Math.cos(pa + 2.5) * 9, py + Math.sin(pa + 2.5) * 9);
-    ctx.lineTo(px + Math.cos(pa - 2.5) * 9, py + Math.sin(pa - 2.5) * 9);
+    ctx.moveTo(cx - 5, apexY - 9);
+    ctx.lineTo(cx + 5, apexY - 9);
+    ctx.lineTo(cx, apexY - 2);
     ctx.closePath();
-    fillOut(bankCol, 4);
-
-    // --- fixed boresight (aircraft symbol) ---
+    fillOut(COL.cyan, 4);
+    // roll pointer (white triangle just inside the arc, tip outward)
+    const pa = -Math.PI / 2 + rollRad;
+    const dirX = Math.cos(pa), dirY = Math.sin(pa);
+    const tipX = cx + dirX * (arcR - 5), tipY = arcCy + dirY * (arcR - 5);
+    const baseX = cx + dirX * (arcR - 13), baseY = arcCy + dirY * (arcR - 13);
     ctx.beginPath();
-    ctx.moveTo(cx - 26, cy); ctx.lineTo(cx - 8, cy);
-    ctx.moveTo(cx + 8, cy); ctx.lineTo(cx + 26, cy);
-    strokeOut('rgba(255,255,255,0.9)', 1.5, 0);
-    ctx.fillStyle = OUTLINE;
-    ctx.fillRect(cx - 2, cy - 2, 4, 4);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.fillRect(cx - 1, cy - 1, 2, 2);
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX - dirY * 4.5, baseY + dirX * 4.5);
+    ctx.lineTo(baseX + dirY * 4.5, baseY - dirX * 4.5);
+    ctx.closePath();
+    fillOut(ptrCol, absRoll > 30 ? 4 : 0);
 
-    // --- flight path marker (circle + 2 wings) ---
+    // No fixed boresight wings: the reference centre reference is the
+    // horizon line + camera pill alone, so nothing is drawn at cx,cy.
+
+    // --- flight path vector (glowing cyan circle-crosshair) ---
+    // Reference: circle with N/S/E/W ticks standing clear of the ring
+    // and a centre dot, offset from centre by the velocity vector.
     // Clamp to the centre guidance area, never the canvas corners.
     const fx = clamp(cx + num(fpm.xDeg, 0) * pxPerDeg, cx - w * 0.34, cx + w * 0.34);
     const fy = clamp(cy - num(fpm.yDeg, 0) * pxPerDeg, cy - h * 0.34, cy + h * 0.34);
+    const fpmR = 11;
     ctx.beginPath();
-    ctx.arc(fx, fy, 9, 0, Math.PI * 2);
-    ctx.moveTo(fx - 22, fy); ctx.lineTo(fx - 10, fy);
-    ctx.moveTo(fx + 10, fy); ctx.lineTo(fx + 22, fy);
-    ctx.moveTo(fx, fy - 16); ctx.lineTo(fx, fy - 10);
-    strokeOut(COL.cyan, 1.5, 6); // FPM cyan per target image (spec: cyan = indicators)
+    ctx.arc(fx, fy, fpmR, 0, Math.PI * 2);
+    ctx.moveTo(fx - fpmR - 7, fy); ctx.lineTo(fx - fpmR - 2, fy);
+    ctx.moveTo(fx + fpmR + 2, fy); ctx.lineTo(fx + fpmR + 7, fy);
+    ctx.moveTo(fx, fy - fpmR - 7); ctx.lineTo(fx, fy - fpmR - 2);
+    ctx.moveTo(fx, fy + fpmR + 2); ctx.lineTo(fx, fy + fpmR + 7);
+    strokeOut(COL.cyan, 1.5, 5); // FPV cyan (spec: cyan = indicators)
+    glow(ctx, COL.cyan, 5);
+    ctx.fillStyle = COL.cyan;
+    ctx.beginPath();
+    ctx.arc(fx, fy, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    noGlow(ctx);
 
     const onPath = fs.onPath || 'none';
     if (onPath !== 'none') {
       const pathCol = onPath === 'good' ? COL.green : COL.amber;
-      // --- glideslope (vertical, right of centre) ---
+      // --- glideslope diamond (vertical, right of centre) ---
+      // Deviation cue only: a short track + diamond, no dot scale,
+      // no label, no chevrons (the FPV already shows the flight path).
       const gsX = cx + Math.min(w * 0.30, 168);
       const gsHalf = h * 0.20;
       ctx.beginPath();
       ctx.moveTo(gsX, cy - gsHalf); ctx.lineTo(gsX, cy + gsHalf);
-      for (const t of [-1, -0.5, 0, 0.5, 1]) {
-        const y = cy - t * gsHalf;
-        ctx.moveTo(gsX + (t === 0 ? 3.5 : 2.5), y);
-        ctx.arc(gsX, y, t === 0 ? 3.5 : 2.5, 0, Math.PI * 2);
-      }
-      strokeOut('rgba(255,255,255,0.55)', 1.5, 0);
+      strokeOut('rgba(255,255,255,0.4)', 1, 0);
       const gsY = cy - clamp(num(fs.glideslopeDev, 0), -1, 1) * gsHalf;
       ctx.beginPath();
-      ctx.moveTo(gsX, gsY - 8); ctx.lineTo(gsX + 7, gsY); ctx.lineTo(gsX, gsY + 8); ctx.lineTo(gsX - 7, gsY);
+      ctx.moveTo(gsX, gsY - 7); ctx.lineTo(gsX + 6, gsY); ctx.lineTo(gsX, gsY + 7); ctx.lineTo(gsX - 6, gsY);
       ctx.closePath();
-      fillOut(pathCol, 6);
-      ctx.font = '700 9px ' + FONT_STACK;
-      ctx.textAlign = 'center';
-      textOut('GS', gsX, cy - gsHalf - 12, COL.label);
-
-      // --- localizer (horizontal, below centre) ---
+      fillOut(pathCol, 5);
+      // --- localizer diamond (horizontal, below centre) ---
       const locY = cy + h * 0.30;
       const locHalf = Math.min(w * 0.22, 120);
       ctx.beginPath();
       ctx.moveTo(cx - locHalf, locY); ctx.lineTo(cx + locHalf, locY);
-      for (const t of [-1, -0.5, 0, 0.5, 1]) {
-        ctx.moveTo(cx + t * locHalf + (t === 0 ? 3.5 : 2.5), locY);
-        ctx.arc(cx + t * locHalf, locY, t === 0 ? 3.5 : 2.5, 0, Math.PI * 2);
-      }
-      strokeOut('rgba(255,255,255,0.55)', 1.5, 0);
+      strokeOut('rgba(255,255,255,0.4)', 1, 0);
       const locX = cx + clamp(num(fs.localizerDev, 0), -1, 1) * locHalf;
       ctx.beginPath();
-      ctx.moveTo(locX, locY - 8); ctx.lineTo(locX + 7, locY); ctx.lineTo(locX, locY + 8); ctx.lineTo(locX - 7, locY);
+      ctx.moveTo(locX, locY - 7); ctx.lineTo(locX + 6, locY); ctx.lineTo(locX, locY + 7); ctx.lineTo(locX - 6, locY);
       ctx.closePath();
-      fillOut(pathCol, 6);
-      textOut('LOC', cx, locY + 16, COL.label);
-
-      // --- runway chevrons (below FPM, pointing up-path) ---
-      // Spacing scales with canvas height so the stack never reaches the
-      // localizer scale on short canvases (768x480).
-      const chevStep = Math.min(13, h * 0.04);
-      ctx.beginPath();
-      for (let i = 0; i < 3; i++) {
-        const yBase = cy + h * 0.15 + i * chevStep;
-        const half = 20 - i * 3;
-        ctx.moveTo(cx - half, yBase + 8);
-        ctx.lineTo(cx, yBase);
-        ctx.lineTo(cx + half, yBase + 8);
-      }
-      strokeOut(pathCol, 2, 5);
+      fillOut(pathCol, 5);
     }
   }
 
-  /* ZONE 5 painter: speed tape (green 22-26, red stall <18, trend arrow) */
+  /* ZONE 5 painter: speed tape — refined to reference.
+     Spine right, numerals left of spine, ticks right of spine.
+     Green target 22–26, red stall <18 as spine edge strips. */
   function drawSpeedTape(fs) {
     const { ctx, w, h } = SPD;
     if (!ctx || w < 20) return;
@@ -621,68 +693,99 @@ export function createFullHud(rootEl) {
     SPD.key = key;
     ctx.clearRect(0, 0, w, h);
     const cy = h / 2;
-    const pxPerUnit = h / 17; // ±8.5 m/s visible
+    const spineX = w - 16;
+    const pxPerUnit = h / 44; // ±22 m/s visible (reference density)
     const yOf = (v) => cy - (v - speed) * pxPerUnit;
-    // bands: green target 22–26, red stall <18
-    ctx.fillStyle = 'rgba(76,255,154,0.20)';
-    ctx.fillRect(0, yOf(26), w, yOf(22) - yOf(26));
-    ctx.fillStyle = 'rgba(255,90,90,0.20)';
-    ctx.fillRect(0, yOf(18), w, h - yOf(18));
+    const OUTLINE = 'rgba(6,12,20,0.72)';
+    function tapeText(text, x, y, colour) {
+      ctx.strokeStyle = OUTLINE;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = colour;
+      ctx.fillText(text, x, y);
+    }
+    // --- spine edge strips: target band + stall band (3 px, no wash) ---
     ctx.fillStyle = COL.green;
-    ctx.fillRect(w - 4, yOf(26), 4, yOf(22) - yOf(26));
+    ctx.fillRect(spineX + 1, yOf(26), 3, yOf(22) - yOf(26));
     ctx.fillStyle = COL.red;
-    ctx.fillRect(w - 4, yOf(18), 4, h - yOf(18));
-    // ticks + labels (label step widens on short canvases so 11px labels
-    // never overlap: every 2 m/s normally, every 5 m/s when pitch < 15px)
-    ctx.font = '700 11px ' + FONT_STACK;
-    ctx.textAlign = 'left';
+    ctx.fillRect(spineX + 1, yOf(18), 3, h - yOf(18));
+    // --- continuous glowing spine, faded at the ends ---
+    const spineGrad = ctx.createLinearGradient(0, 0, 0, h);
+    spineGrad.addColorStop(0, 'rgba(62,242,255,0)');
+    spineGrad.addColorStop(0.12, 'rgba(62,242,255,0.9)');
+    spineGrad.addColorStop(0.88, 'rgba(62,242,255,0.9)');
+    spineGrad.addColorStop(1, 'rgba(62,242,255,0)');
+    glow(ctx, COL.cyan, 5);
+    ctx.strokeStyle = spineGrad;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(spineX, 0);
+    ctx.lineTo(spineX, h);
+    ctx.stroke();
+    noGlow(ctx);
+    // --- ticks (every 2) + labels (every 10), numerals left of spine ---
+    ctx.font = '600 10px ' + FONT_STACK;
+    ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    const labelStep = pxPerUnit * 2 >= 15 ? 2 : 5;
-    const lo = Math.floor(speed - 9), hi = Math.ceil(speed + 9);
-    for (let v = lo; v <= hi; v++) {
+    const lo = Math.floor((speed - 23) / 2) * 2, hi = Math.ceil((speed + 23) / 2) * 2;
+    for (let v = lo; v <= hi; v += 2) {
       if (v < 0) continue;
       const y = yOf(v);
       if (y < -6 || y > h + 6) continue;
-      const major = v % labelStep === 0;
-      ctx.strokeStyle = major ? COL.white : 'rgba(255,255,255,0.45)';
-      ctx.lineWidth = 1.5;
+      const major = v % 10 === 0;
+      const mid = v % 5 === 0;
+      ctx.strokeStyle = major ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(w - (major ? 12 : 7), y);
-      ctx.lineTo(w, y);
+      ctx.moveTo(spineX, y);
+      ctx.lineTo(spineX + (major ? 9 : mid ? 7 : 5), y);
       ctx.stroke();
-      if (major && y >= 7 && y <= h - 7) {
-        ctx.fillStyle = v < 18 ? COL.red : v >= 22 && v <= 26 ? COL.green : COL.white;
-        ctx.fillText(String(v), 3, y);
+      if (major && y >= 9 && y <= h - 9) {
+        const col = v < 18 ? COL.red : v >= 22 && v <= 26 ? COL.green : 'rgba(255,255,255,0.88)';
+        tapeText(String(v), spineX - 6, y, col);
       }
     }
-    // trend arrow (to predicted speed)
-    const ty = clamp(yOf(trend), 8, h - 8);
+    // --- trend bar (far left, reference's slim vertical bar) ---
     if (Math.abs(trend - speed) > 0.15) {
+      const tx = 7;
+      const ty = clamp(yOf(trend), 8, h - 8);
       const tCol = trend > speed ? COL.green : COL.amber;
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx, 10);
+      ctx.lineTo(tx, h - 10);
+      ctx.stroke();
       glow(ctx, tCol, 5);
       ctx.strokeStyle = tCol;
       ctx.fillStyle = tCol;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(w - 8, cy);
-      ctx.lineTo(w - 8, ty);
+      ctx.moveTo(tx, cy);
+      ctx.lineTo(tx, ty);
       ctx.stroke();
       ctx.beginPath();
-      if (trend > speed) { ctx.moveTo(w - 12, ty + 2); ctx.lineTo(w - 4, ty + 2); ctx.lineTo(w - 8, ty - 5); }
-      else { ctx.moveTo(w - 12, ty - 2); ctx.lineTo(w - 4, ty - 2); ctx.lineTo(w - 8, ty + 5); }
+      if (trend > speed) { ctx.moveTo(tx - 4, ty + 2); ctx.lineTo(tx + 4, ty + 2); ctx.lineTo(tx, ty - 5); }
+      else { ctx.moveTo(tx - 4, ty - 2); ctx.lineTo(tx + 4, ty - 2); ctx.lineTo(tx, ty + 5); }
       ctx.closePath();
       ctx.fill();
       noGlow(ctx);
     }
-    // centre caret (value box is DOM, aligned to this line)
+    // --- centre caret on the spine (DOM value box points here) ---
+    glow(ctx, COL.cyan, 4);
     ctx.fillStyle = COL.white;
     ctx.beginPath();
-    ctx.moveTo(w, cy - 6); ctx.lineTo(w, cy + 6); ctx.lineTo(w - 7, cy);
+    ctx.moveTo(spineX + 11, cy - 5); ctx.lineTo(spineX + 11, cy + 5); ctx.lineTo(spineX + 4, cy);
     ctx.closePath();
     ctx.fill();
+    noGlow(ctx);
   }
 
-  /* ZONE 6 painter: altitude tape + VS strip (green -2, amber -4, red beyond) */
+  /* ZONE 6 painter: altitude tape + VSI — refined to reference.
+     Spine left, numerals right of spine, ticks left of spine.
+     VSI track at right edge, centre-zero fill (green / amber -2 /
+     red -4), ±6 m/s full scale. */
   function drawAltTape(fs) {
     const { ctx, w, h } = ALT;
     if (!ctx || w < 30) return;
@@ -692,66 +795,103 @@ export function createFullHud(rootEl) {
     ALT.key = key;
     ctx.clearRect(0, 0, w, h);
     const cy = h / 2;
-    const tapeW = w - 16; // VS strip occupies right 12 px
-    const pxPerM = h / 130; // ±65 m visible
+    const spineX = 16;
+    const pxPerM = h / 130; // ±65 m visible (matches reference 220–320)
     const yOf = (v) => cy - (v - alt) * pxPerM;
-    // ground band below 0
-    if (yOf(0) < h) {
-      ctx.fillStyle = 'rgba(255,181,71,0.14)';
-      ctx.fillRect(0, Math.max(0, yOf(0)), tapeW, h);
+    const OUTLINE = 'rgba(6,12,20,0.72)';
+    function tapeText(text, x, y, colour) {
+      ctx.strokeStyle = OUTLINE;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = colour;
+      ctx.fillText(text, x, y);
     }
-    ctx.font = '700 11px ' + FONT_STACK;
-    ctx.textAlign = 'right';
+    // ground band below 0 (faint wash, tape side only)
+    if (yOf(0) < h) {
+      ctx.fillStyle = 'rgba(255,181,71,0.10)';
+      ctx.fillRect(0, Math.max(0, yOf(0)), w - 22, h);
+    }
+    // --- continuous glowing spine, faded at the ends ---
+    const spineGrad = ctx.createLinearGradient(0, 0, 0, h);
+    spineGrad.addColorStop(0, 'rgba(62,242,255,0)');
+    spineGrad.addColorStop(0.12, 'rgba(62,242,255,0.9)');
+    spineGrad.addColorStop(0.88, 'rgba(62,242,255,0.9)');
+    spineGrad.addColorStop(1, 'rgba(62,242,255,0)');
+    glow(ctx, COL.cyan, 5);
+    ctx.strokeStyle = spineGrad;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(spineX, 0);
+    ctx.lineTo(spineX, h);
+    ctx.stroke();
+    noGlow(ctx);
+    // --- ticks (every 5) + labels (every 20; every 50 on short canvas) ---
+    ctx.font = '600 10px ' + FONT_STACK;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    // label step widens on short canvases (every 20 m normally, every 50 m
-    // when pitch < 15px) so 11px labels never overlap or clip at the edges
     const labelStepM = pxPerM * 20 >= 15 ? 20 : 50;
-    const lo = Math.floor((alt - 70) / 10) * 10, hi = Math.ceil((alt + 70) / 10) * 10;
-    for (let v = lo; v <= hi; v += 10) {
+    const lo = Math.floor((alt - 70) / 5) * 5, hi = Math.ceil((alt + 70) / 5) * 5;
+    for (let v = lo; v <= hi; v += 5) {
       const y = yOf(v);
       if (y < -6 || y > h + 6) continue;
       const major = v % labelStepM === 0;
-      ctx.strokeStyle = major ? COL.white : 'rgba(255,255,255,0.45)';
-      ctx.lineWidth = 1.5;
+      const mid = v % 10 === 0;
+      ctx.strokeStyle = major ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(major ? 12 : 7, y);
+      ctx.moveTo(spineX - (major ? 9 : mid ? 7 : 5), y);
+      ctx.lineTo(spineX, y);
       ctx.stroke();
-      if (major && y >= 7 && y <= h - 7) {
-        ctx.fillStyle = COL.white;
-        ctx.fillText(String(v), tapeW - 3, y);
+      if (major && y >= 9 && y <= h - 9) {
+        tapeText(String(v), spineX + 6, y, 'rgba(255,255,255,0.88)');
       }
     }
-    // centre caret
+    // --- centre caret on the spine (DOM value box points here) ---
+    glow(ctx, COL.cyan, 4);
     ctx.fillStyle = COL.white;
     ctx.beginPath();
-    ctx.moveTo(0, cy - 6); ctx.lineTo(0, cy + 6); ctx.lineTo(7, cy);
+    ctx.moveTo(spineX - 11, cy - 5); ctx.lineTo(spineX - 11, cy + 5); ctx.lineTo(spineX - 4, cy);
     ctx.closePath();
     ctx.fill();
-    // --- VS strip ---
-    const sx = w - 11, sw = 8;
-    const vsHalf = h * 0.42;
+    noGlow(ctx);
+    // --- VSI strip: thin track, centre-zero fill up/down ---
+    const sx = w - 13, sw = 9;
+    const vsHalf = h * 0.44;
     const vsScale = vsHalf / 6; // ±6 m/s full scale
+    const trackTop = cy - vsHalf, trackBot = cy + vsHalf;
+    ctx.fillStyle = 'rgba(10,14,22,0.55)';
+    ctx.fillRect(sx, trackTop, sw, vsHalf * 2);
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(sx, cy - vsHalf, sw, vsHalf * 2);
+    ctx.strokeRect(sx + 0.5, trackTop + 0.5, sw - 1, vsHalf * 2 - 1);
+    // scale ticks left of the track; centre datum longer + brighter
     for (const t of [-6, -4, -2, 0, 2, 4, 6]) {
       const y = cy - t * vsScale;
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.strokeStyle = t === 0 ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = t === 0 ? 1.5 : 1;
       ctx.beginPath();
-      ctx.moveTo(sx - 3, y); ctx.lineTo(sx, y);
+      ctx.moveTo(sx - (t === 0 ? 5 : 3), y);
+      ctx.lineTo(sx, y);
       ctx.stroke();
     }
+    // centre datum line across the track
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx, cy);
+    ctx.lineTo(sx + sw, cy);
+    ctx.stroke();
     const vsCol = vs < -4 ? COL.red : vs < -2 ? COL.amber : COL.green;
     const vsY = cy - clamp(vs, -6, 6) * vsScale;
-    glow(ctx, vsCol, 4);
+    glow(ctx, vsCol, 5);
     ctx.fillStyle = vsCol;
     ctx.fillRect(sx + 1, Math.min(cy, vsY), sw - 2, Math.max(2, Math.abs(vsY - cy)));
     noGlow(ctx);
-    ctx.fillStyle = COL.label;
     ctx.font = '700 8px ' + FONT_STACK;
     ctx.textAlign = 'center';
-    ctx.fillText('VS', sx + sw / 2, cy - vsHalf - 7);
+    ctx.textBaseline = 'bottom';
+    tapeText('VSI', sx + sw / 2, trackTop - 2, 'rgba(255,255,255,0.75)');
   }
 
   /* ZONE 7 painter: heading-up circular minimap (plane fixed centre) */
@@ -760,9 +900,11 @@ export function createFullHud(rootEl) {
     if (!ctx || w < 30) return;
     const mm = fs.minimap || {};
     const now = performance.now();
+    const sweepDeg = (now / 1000 * 36) % 360; // 10 s per revolution
     const key = [Math.round(num(mm.planeX, 0) / 5), Math.round(num(mm.planeZ, 0) / 5),
-      Math.round(num(mm.headingDeg, 0)), Math.round(num(mm.targetX, 0) / 10),
-      Math.round(num(mm.targetZ, 0) / 10), mm.hasTarget ? 1 : 0, w + 'x' + h].join(':');
+      Math.round(num(mm.headingDeg, num(fs.headingDeg, 0))),
+      Math.round(num(mm.targetX, 0) / 10), Math.round(num(mm.targetZ, 0) / 10),
+      mm.hasTarget ? 1 : 0, Math.round(sweepDeg / 12), w + 'x' + h].join(':');
     if (key === MAP.key && now - MAP.lastMs < 500) return;
     if (now - MAP.lastMs < 66) return; // ≤15 Hz
     MAP.key = key;
@@ -770,44 +912,47 @@ export function createFullHud(rootEl) {
     ctx.clearRect(0, 0, w, h);
     const cx = w / 2, cy = h / 2;
     const R = Math.min(w, h) / 2 - 2;
-    const heading = num(mm.headingDeg, 0);
+    const heading = num(mm.headingDeg, num(fs.headingDeg, 0));
     const worldSize = Math.max(100, num(mm.worldSize, 8000));
     const viewRadius = worldSize * 0.38; // metres to rim
     const scale = R / viewRadius;
     const px = num(mm.planeX, 0), pz = num(mm.planeZ, 0);
+    const pulse = 0.5 + 0.5 * Math.sin(now / 320);
 
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.clip();
-    // sea
-    ctx.fillStyle = 'rgba(8,26,44,0.92)';
+    // sea (radial, darker at rim like the reference)
+    const sea = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R);
+    sea.addColorStop(0, 'rgba(10,34,54,0.94)');
+    sea.addColorStop(1, 'rgba(4,14,26,0.96)');
+    ctx.fillStyle = sea;
     ctx.fillRect(0, 0, w, h);
     // rotate map so heading is up: world->screen with heading-up rotation
     ctx.translate(cx, cy);
     ctx.rotate(-(heading * Math.PI) / 180);
     // range rings (drawn in rotated frame, still circular)
-    ctx.strokeStyle = 'rgba(62,242,255,0.18)';
+    ctx.strokeStyle = 'rgba(62,242,255,0.20)';
     ctx.lineWidth = 1;
     for (const f of [0.33, 0.66, 1]) {
       ctx.beginPath();
       ctx.arc(0, 0, R * f, 0, Math.PI * 2);
       ctx.stroke();
     }
-    // islands
+    // islands (dark landmass, pale shore outline)
     for (const isl of (mm.islands || [])) {
       const ix = (num(isl.x, 0) - px) * scale;
       const iz = (num(isl.z, 0) - pz) * scale;
       const ir = Math.max(2, num(isl.radius, 0) * scale);
       if (Math.abs(ix) > R + ir || Math.abs(iz) > R + ir) continue;
-      ctx.fillStyle = 'rgba(217,179,128,0.85)';
-      ctx.beginPath();
-      ctx.arc(ix, iz, ir + 1.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(78,122,58,0.95)';
+      ctx.fillStyle = 'rgba(24,52,42,0.92)';
+      ctx.strokeStyle = 'rgba(150,220,235,0.40)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(ix, iz, ir, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
     }
     // strips
     for (const st of (mm.strips || [])) {
@@ -823,10 +968,11 @@ export function createFullHud(rootEl) {
       ctx.fillRect(-0.5, -7, 1, 14);
       ctx.restore();
     }
-    // route line + target
+    // route line + target (diamond inside, rim chevron when off-map)
     if (mm.hasTarget) {
       const tx = (num(mm.targetX, 0) - px) * scale;
       const tz = (num(mm.targetZ, 0) - pz) * scale;
+      const dist = Math.hypot(tx, tz);
       ctx.strokeStyle = 'rgba(76,255,154,0.75)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([5, 4]);
@@ -835,7 +981,7 @@ export function createFullHud(rootEl) {
       ctx.lineTo(tx, tz);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (Math.abs(tx) <= R && Math.abs(tz) <= R) {
+      if (dist <= R - 8) {
         glow(ctx, COL.green, 5);
         ctx.fillStyle = COL.green;
         ctx.beginPath();
@@ -843,23 +989,84 @@ export function createFullHud(rootEl) {
         ctx.closePath();
         ctx.fill();
         noGlow(ctx);
+        ctx.strokeStyle = 'rgba(76,255,154,' + (0.35 + 0.4 * pulse).toFixed(2) + ')';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(tx, tz, 10 + 3 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (dist > 0.01) {
+        const ax = (tx / dist) * (R - 11), ay = (tz / dist) * (R - 11);
+        const ang = Math.atan2(ay, ax);
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(ang);
+        glow(ctx, COL.green, 5);
+        ctx.fillStyle = COL.green;
+        ctx.beginPath();
+        ctx.moveTo(7, 0); ctx.lineTo(-4, -5); ctx.lineTo(-4, 5);
+        ctx.closePath();
+        ctx.fill();
+        noGlow(ctx);
+        ctx.restore();
       }
+    }
+    // optional traffic (small plane glyphs, relative heading)
+    for (const tr of (mm.traffic || [])) {
+      const tx2 = (num(tr.x, 0) - px) * scale;
+      const tz2 = (num(tr.z, 0) - pz) * scale;
+      if (Math.abs(tx2) > R || Math.abs(tz2) > R) continue;
+      ctx.save();
+      ctx.translate(tx2, tz2);
+      ctx.rotate(((num(tr.headingDeg, 0) - heading) * Math.PI) / 180);
+      ctx.fillStyle = 'rgba(160,240,255,0.85)';
+      ctx.beginPath();
+      ctx.moveTo(0, -5); ctx.lineTo(3.5, 4); ctx.lineTo(0, 1.8); ctx.lineTo(-3.5, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     }
     ctx.restore();
 
-    // rim + N marker (N sits at -heading on the rim, heading-up map)
+    // radar sweep (screen space): faint wedge + leading line
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.clip();
+    const sa = ((sweepDeg - 90) * Math.PI) / 180;
+    ctx.fillStyle = 'rgba(62,242,255,0.05)';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, sa - 0.5, sa);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(62,242,255,0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(sa) * R, cy + Math.sin(sa) * R);
+    ctx.stroke();
+    ctx.restore();
+
+    // rim + range labels + N marker (N sits at -heading on the rim)
     ctx.strokeStyle = 'rgba(62,242,255,0.55)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.font = '700 8px ' + FONT_STACK;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const f of [0.33, 0.66]) {
+      const metres = viewRadius * f;
+      const lab = metres >= 1000 ? (metres / 1000).toFixed(1) + 'k' : Math.round(metres) + '';
+      ctx.fillText(lab, cx, cy - R * f + 6);
+    }
     const nAng = -Math.PI / 2 - (heading * Math.PI) / 180;
     const nx = cx + Math.cos(nAng) * (R - 10);
     const ny = cy + Math.sin(nAng) * (R - 10);
     ctx.fillStyle = COL.white;
     ctx.font = '800 11px ' + FONT_STACK;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     ctx.fillText('N', nx, ny);
     // rim ticks every 30° of map rotation
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
@@ -871,7 +1078,21 @@ export function createFullHud(rootEl) {
       ctx.lineTo(cx + Math.cos(a) * (R - 5), cy + Math.sin(a) * (R - 5));
       ctx.stroke();
     }
-    // plane symbol (fixed centre, pointing up)
+    // heading bug (fixed triangle at top of rim)
+    ctx.fillStyle = COL.cyan;
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, cy - R + 1);
+    ctx.lineTo(cx + 5, cy - R + 1);
+    ctx.lineTo(cx, cy - R + 8);
+    ctx.closePath();
+    ctx.fill();
+    // plane symbol (fixed centre, pointing up) + heading stalk
+    ctx.strokeStyle = 'rgba(62,242,255,0.6)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 10);
+    ctx.lineTo(cx, cy - 18);
+    ctx.stroke();
     glow(ctx, COL.cyan, 5);
     ctx.fillStyle = COL.cyan;
     ctx.beginPath();
@@ -915,7 +1136,7 @@ export function createFullHud(rootEl) {
 
     /* ZONE 2: TOP-CENTRE (update) */
     setText(capTime, 'time', fmtClock(fs.timeSeconds));
-    setText(capScore, 'score', 'SCORE ' + Math.round(num(fs.score, 0)).toLocaleString('en-US'));
+    setText(capScoreValue, 'score', Math.round(num(fs.score, 0)).toLocaleString('en-US'));
     setText(capCombo, 'combo', 'x' + num(fs.combo, 1).toFixed(1) + ' COMBO');
     if (fs.scorePulse) {
       capsule.classList.remove('hf-pulse');
@@ -966,34 +1187,44 @@ export function createFullHud(rootEl) {
 
     /* ZONE 7: BOTTOM-LEFT (update) */
     drawMinimap(fs);
-    setText(pryRows.pitch, 'pry:pitch', signed1(sm.pitch));
-    setText(pryRows.roll, 'pry:roll', signed1(sm.roll));
-    setText(pryRows.yaw, 'pry:yaw', signed1(fs.yawDeg));
+    setText(pryRows.pitch.value, 'pry:pitch', signed1(sm.pitch));
+    setText(pryRows.roll.value, 'pry:roll', signed1(sm.roll));
+    setText(pryRows.yaw.value, 'pry:yaw', signed1(fs.yawDeg));
 
     /* ZONE 8: BOTTOM-CENTRE (update) */
     setText(flapsChip.value, 'flaps', Math.round(num(fs.flapsDeg, 0)) + '°');
     const gear = fs.gear || 'DOWN';
-    setText(gearChip.value, 'gear', gear === 'DOWN' ? 'DOWN ●●●' : gear);
+    setText(gearChip.value, 'gear', gear);
     setFlag(gearChip.chip, 'gear', 'hf-gear-down', gear === 'DOWN');
     setFlag(gearChip.chip, 'gear', 'hf-gear-moving', gear === 'MOVING');
     setFlag(gearChip.chip, 'gear', 'hf-gear-up', gear === 'UP');
+    setFlag(gearDots, 'geardots', 'hf-dots-down', gear === 'DOWN');
+    setFlag(gearDots, 'geardots', 'hf-dots-moving', gear === 'MOVING');
+    setFlag(gearDots, 'geardots', 'hf-dots-up', gear === 'UP');
     setText(brakesChip.value, 'brakes', fs.brakes || 'OFF');
     setFlag(brakesChip.chip, 'brakes', 'hf-chip-on', fs.brakes === 'ON');
     setFlag(brakesChip.chip, 'brakes', 'hf-chip-amber', fs.brakes === 'ARMED');
+    setFlag(brakesChip.chip, 'brakes', 'hf-chip-off', !fs.brakes || fs.brakes === 'OFF');
     setText(lightsChip.value, 'lights', fs.lights || 'OFF');
     setFlag(lightsChip.chip, 'lights', 'hf-chip-on', fs.lights === 'ON');
+    setFlag(lightsChip.chip, 'lights', 'hf-chip-off', fs.lights !== 'ON');
     setText(spoilersChip.value, 'spoilers', fs.spoilers || 'OFF');
     setFlag(spoilersChip.chip, 'spoilers', 'hf-chip-amber', fs.spoilers === 'ARMED');
-    setText(destBarText, 'destbar', '▲ ' + (fs.destLabel || '—') + ' · ' + Math.round(num(fs.destDistM, 0)) + ' M');
+    setFlag(spoilersChip.chip, 'spoilers', 'hf-chip-on', fs.spoilers === 'ON' || fs.spoilers === 'DEPLOYED');
+    setFlag(spoilersChip.chip, 'spoilers', 'hf-chip-off', !fs.spoilers || fs.spoilers === 'OFF');
+    const destDist = fs.distM !== undefined ? num(fs.distM, 0) : num(fs.destDistM, 0);
+    setText(destBarText, 'destbar', '▲ ' + (fs.destLabel || '—') + ' · ' + Math.round(destDist) + ' M');
     setStyle(destProgressFill, 'destprog', 'width', (clamp(num(fs.destProgress01, 0), 0, 1) * 100).toFixed(1) + '%');
 
     /* ZONE 9: BOTTOM-RIGHT (update) */
-    const thr01 = clamp(num(fs.throttle01, 0), 0, 1);
+    const thrRaw = fs.throttle !== undefined ? num(fs.throttle, 0) : num(fs.throttle01, 0);
+    const thr01 = thrRaw > 1 ? clamp(thrRaw / 100, 0, 1) : clamp(thrRaw, 0, 1);
     setStyle(thrFill, 'thr', 'width', (thr01 * 100).toFixed(1) + '%');
     setText(thrPct, 'thrpct', Math.round(thr01 * 100) + '%');
     setText(rpmRow.value, 'rpm', Math.round(num(fs.rpm, 0)).toLocaleString('en-US'));
     const fuelPct = clamp(num(fs.fuelPct, 0), 0, 100);
-    setText(fuelRow.value, 'fuel', Math.round(fuelPct) + '% · ' + Math.round(num(fs.fuelLitres, 0)) + ' L · ' + fmtFuelTime(fs.fuelTimeH));
+    setText(fuelRow.value, 'fuel', Math.round(fuelPct) + '% (' + Math.round(num(fs.fuelLitres, 0)) + ' L · ' + fmtFuelTime(fs.fuelTimeH) + ')');
+    setStyle(fuelFill, 'fuelbar', 'width', fuelPct.toFixed(1) + '%');
     setFlag(fuelRow.row, 'fuel', 'hf-warn-amber', fuelPct < 20 && fuelPct >= 10);
     setFlag(fuelRow.row, 'fuel', 'hf-warn-red', fuelPct < 10);
     setFlag(fuelRow.row, 'fuel', 'hf-blink-red', fuelPct < 10);
@@ -1005,13 +1236,19 @@ export function createFullHud(rootEl) {
     const g = num(fs.gLoad, 1);
     setText(gValue, 'gload', g.toFixed(2) + ' g');
     setFlag(gValue, 'gload', 'hf-warn-amber', g > 3);
+    const acir = fs.acir !== undefined ? num(fs.acir, 0) : g;
+    setText(acirValue, 'acir', acir.toFixed(2));
     const trim = num(fs.trim, 0);
     setText(trimValue, 'trim', (trim > 0 ? '+' : '') + trim.toFixed(1));
     const caution = fs.caution || null;
-    const ok = fs.systemsOk !== false;
-    setText(sysStripText, 'sysstrip', ok ? 'ALL SYSTEMS NOMINAL' : 'SYSTEMS CAUTION');
-    setFlag(sysStrip, 'sysstrip', 'hf-sys-ok', ok);
-    setFlag(sysStrip, 'sysstrip', 'hf-sys-caution', !ok);
+    const isRed = !!(caution && caution.level === 'red');
+    const ok = fs.systemsOk !== false && !caution;
+    setText(sysStripText, 'sysstrip', isRed ? 'SYSTEMS WARNING' : ok ? 'ALL SYSTEMS NOMINAL' : 'SYSTEMS CAUTION');
+    setFlag(sysStrip, 'sysstrip', 'hf-sys-ok', ok && !isRed);
+    setFlag(sysStrip, 'sysstrip', 'hf-sys-caution', !ok && !isRed);
+    setFlag(sysStrip, 'sysstrip', 'hf-sys-warning', isRed);
+    setFlag(sysStrip, 'sysstrip', 'hf-blink-red', isRed);
+    setText(sysCheck, 'syscheck', isRed ? '!' : ok ? '✓' : '!');
     if (caution) {
       setText(cautionChip, 'caution', caution.label || 'CAUTION');
       setStyle(cautionChip, 'caution', 'display', '');

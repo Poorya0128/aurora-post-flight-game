@@ -1,13 +1,15 @@
-// sea.js — VD6-SEA realism pass for the AURORA POST sea (V6-SEA agent).
+// sea.js — SEA visual upgrade for the AURORA POST sea (reference-matched).
 // One job: replace the flat textured sea plane + separate additive glint
-// quad (world.js buildSea) with a single custom-shader sea: deep-teal
-// base, procedural scrolling wave normals, Fresnel sky reflection with
-// sunset warmth, a sun-glint glitter lane that forms toward the dawn
-// sun's azimuth (Blinn specular through perturbed normals + twinkling
-// sparkle mask), animated shoreline foam baked from the real heightfield,
-// and a gentle vertex swell damped at the coasts. Everything procedural
-// (canvas/DataTextures only, no assets), one draw call, fragment cost
-// kept modest for SwiftShader (2 normal samples + 1 mask sample).
+// quad (world.js buildSea) with a single custom-shader sea matched to the
+// env1/env2 references: saturated deep-blue offshore grading to turquoise
+// shallows (baked heightfield shallowness), Fresnel sky reflection of a
+// peach-horizon → blue-violet-zenith gradient, a bright sun-glitter path
+// (Blinn specular through perturbed normals + twinkling sparkle), a
+// two-band animated foam ring (bright waterline + soft outer lace) on
+// every coastline, and a gentle vertex swell damped at the coasts.
+// Everything procedural (canvas/DataTextures only, no assets, seeded),
+// one draw call, fragment cost kept modest for SwiftShader/mid GPUs
+// (2 normal samples + 1 mask sample, no per-frame allocations).
 //
 // Hook contract (minimal, world.js/render.js untouched — they are held
 // by V6-WORLD-LOOK): main.js calls upgradeSea(scene, world) once after
@@ -22,15 +24,18 @@
 import * as THREE from 'three';
 import { cameraLink } from './camera-link.js';
 
-// Palette anchors (render.js / world.js hexes — same dawn style).
-const SEA_DEEP = 0x0b3552;      // deep teal (world seaDeep 0x123c5a family, deepened for the shader base)
-const SEA_SHALLOW = 0x1a6d80;   // sunlit shallows over sand
-const SKY_ZENITH = 0x2b3a67;
-const SKY_MID = 0x7a5c8f;
-const SKY_HORIZON = 0xff9e64;
+// Palette anchors — reference-matched (env1/env2): cobalt offshore,
+// turquoise shallows, peach horizon → blue-violet zenith sky reflection.
+// Sky colours are uniforms (uHorizonColour / uMidColour / uZenithColour
+// on seaState.uniforms) so the coordinator can sync them with the sky.
+const SEA_DEEP = 0x0d4f8a;      // saturated deep-blue offshore (env1 foreground)
+const SEA_SHALLOW = 0x24c2b0;   // bright turquoise shallows near islands (round-2: more aqua)
+const SKY_ZENITH = 0x4b5cc4;    // blue-violet zenith (round-2 sky sync)
+const SKY_MID = 0xb8a9d9;       // pale lavender-blue mid-sky (round-2 sky sync)
+const SKY_HORIZON = 0xffc9a3;   // peach horizon (brief palette, kept)
 const SUN_COLOUR = 0xffd166;
-const GLINT_COLOUR = 0xffb35c;  // golden glitter (world seaSunPath family)
-const FOAM_COLOUR = 0xfff3e2;
+const GLINT_COLOUR = 0xffd9a0;  // near-white warm gold glitter path (env1/env2 sparkle)
+const FOAM_COLOUR = 0xffffff;   // bright white foam ring (env1 coastline)
 
 // Fallback sun direction (must match render.js SUN_DIRECTION: 9°
 // elevation, 0.18 southward tilt). cameraLink.sunDirection wins when set.
@@ -138,8 +143,8 @@ function makeWaveNormalTexture() {
 }
 
 // Shore/depth mask baked from the real heightfield over the playable
-// square: R = foam factor (1 at the waterline, fading by ~7 m depth),
-// G = shallowness (1 at depth 0 → 0 at 12 m), B = normalised depth.
+// square: R = foam factor (1 at the waterline, fading by ~3.2 m depth),
+// G = shallowness (1 at depth 0 → 0 at 18 m), B = normalised depth.
 // Texels far from every island skip heightAt (open-sea seabed is deep).
 function makeShoreMaskTexture(world) {
   const heightAt = world && typeof world.heightAt === 'function' ? world.heightAt : null;
@@ -164,8 +169,11 @@ function makeShoreMaskTexture(world) {
         if (dx * dx + dz * dz <= reach * reach) { nearIsland = true; break; }
       }
       if (nearIsland && heightAt) depth = seaLevel - heightAt(x, z);
-      const foam = depth <= 0 ? 1 : 1 - smoothStep(1.2, 7, depth);
-      const shallow = depth <= 0 ? 1 : Math.max(0, 1 - depth / 12);
+      // Round-2: foam hugs the waterline (was 1.2–7 m → thick halo);
+      // shallowness reaches deeper (was 12 m) so the aqua fringe
+      // reads from altitude without turning whole bays turquoise.
+      const foam = depth <= 0 ? 1 : 1 - smoothStep(0.4, 3.2, depth);
+      const shallow = depth <= 0 ? 1 : Math.max(0, 1 - depth / 18);
       data[idx] = Math.round(foam * 255);
       data[idx + 1] = Math.round(shallow * 255);
       data[idx + 2] = Math.round(Math.min(1, Math.max(0, depth / 14)) * 255);
@@ -248,41 +256,55 @@ const SEA_FRAGMENT_SHADER = [
   '  vec3 normal = normalize(vec3(slope.x, 1.0, slope.y));',
   // Shore mask: foam factor / shallowness / depth.
   '  vec3 shore = texture2D(uShoreMask, vMaskUv).rgb;',
-  // Fresnel sky reflection (Schlick) with the dawn gradient + sun glow
-  // in the reflected ray — the sunset reflection on the water.
+  // Fresnel sky reflection (Schlick) of the peach → violet gradient +
+  // sun glow in the reflected ray (env2 peach/violet water mirror).
   '  float fresnel = 0.025 + 0.975 * pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);',
   '  vec3 reflectDir = reflect(-viewDir, normal);',
-  '  vec3 skyReflect = mix(uHorizonColour, uMidColour, smoothstep(-0.02, 0.16, reflectDir.y));',
-  '  skyReflect = mix(skyReflect, uZenithColour, smoothstep(0.12, 0.55, reflectDir.y));',
-  '  skyReflect += uSunColour * pow(max(dot(reflectDir, sunDir), 0.0), 10.0) * 0.4;',
-  // Deep-teal base, turquoise in the shallows. Reflection mix is capped
-  // below full Fresnel: at the judged shots' grazing angles a physical
-  // Fresnel term turns the whole sea pale pink (sea-chase.jpg v1), while
-  // the reference keeps a blue body with a golden lane on top.
-  '  vec3 base = mix(uDeepColour, uShallowColour, shore.g * 0.55);',
-  '  vec3 colour = mix(base, skyReflect, clamp(fresnel * 0.8, 0.0, 0.68));',
-  // Sun-glint glitter lane: tight Blinn specular through the perturbed
-  // normal naturally pools toward the sun azimuth; a twinkling sparkle
-  // mask breaks it into flecks, and a flat-normal alignment term keeps
-  // the lane broad and readable at judge size. A wide warm sheen sits
-  // under the flecks.
+  '  vec3 skyReflect = mix(uHorizonColour, uMidColour, smoothstep(-0.02, 0.22, reflectDir.y));',
+  '  skyReflect = mix(skyReflect, uZenithColour, smoothstep(0.18, 0.6, reflectDir.y));',
+  '  skyReflect += uSunColour * pow(max(dot(reflectDir, sunDir), 0.0), 10.0) * 0.35;',
+  // Deep-blue offshore → turquoise shallows via baked shallowness (G).
+  // Round-2: stronger lift (pow 0.55 × 0.92, was 0.75 × 0.85) + wider
+  // 18 m bake so the aqua fringe is clear around every island from
+  // altitude. Reflection cap cut (×0.60, max 0.45; was ×0.85, max 0.72)
+  // so mid/far sea keeps its blue body instead of washing pale
+  // pink-grey; the glitter lane below stays at full strength.
+  '  vec3 base = mix(uDeepColour, uShallowColour, pow(shore.g, 0.55) * 0.92);',
+  '  vec3 colour = mix(base, skyReflect, clamp(fresnel * 0.60, 0.0, 0.45));',
+  // Sun-glitter path (env1 bright lane / env2 sparkle flecks): tight
+  // Blinn specular through the perturbed normal pools toward the sun
+  // azimuth (uSunDirection); a twinkling hash sparkle breaks it into
+  // flecks, and a flat-normal alignment term keeps the lane broad and
+  // readable from altitude. A wide warm sheen sits under the flecks.
   '  vec3 halfDir = normalize(viewDir + sunDir);',
-  '  float specTight = pow(max(dot(normal, halfDir), 0.0), 260.0);',
-  '  float specWide = pow(max(dot(normal, halfDir), 0.0), 22.0);',
+  '  float ndh = max(dot(normal, halfDir), 0.0);',
+  '  float specTight = pow(ndh, 320.0);',
+  '  float specWide = pow(ndh, 28.0);',
   '  vec3 flatReflect = reflect(-viewDir, vec3(0.0, 1.0, 0.0));',
-  '  float lane = pow(max(dot(flatReflect, sunDir), 0.0), 2.2);',
-  '  vec2 sparkleCell = floor(worldXZ * 0.55) + floor(uTime * 2.4) * 17.0;',
-  '  float sparkle = smoothstep(0.45, 0.9, hash12(sparkleCell) * 0.6 + n1.z * 0.55);',
-  '  float glitter = specTight * (0.25 + sparkle * 1.6) * (0.35 + lane * 1.15);',
-  '  colour += uGlintColour * glitter * 4.6;',
-  '  colour += uGlintColour * specWide * (0.16 + lane * 0.5);',
-  // Animated shoreline foam: mask band × moving swash stripes broken
-  // by the wave-normal noise. Existing coast-surf ribbon (world-
-  // dressing) still draws on top; this is the water-side foam edge.
+  '  float lane = pow(max(dot(flatReflect, sunDir), 0.0), 2.6);',
+  '  vec2 sparkleCell = floor(worldXZ * 0.7) + floor(uTime * 2.8) * 17.0;',
+  '  float sparkle = smoothstep(0.42, 0.92, hash12(sparkleCell) * 0.6 + n1.z * 0.55);',
+  '  float glitter = specTight * (0.3 + sparkle * 1.9) * (0.35 + lane * 1.3);',
+  '  colour += uGlintColour * glitter * 5.5;',
+  '  colour += uGlintColour * specWide * (0.2 + lane * 0.6);',
+  // Animated two-band foam ring (env1 white coastline): bright
+  // waterline band + softer outer lace, both carved from the baked
+  // foam factor (R) and broken by the time-scrolling normal noise +
+  // swash stripes, so the ring breathes and scrolls. No extra samples:
+  // n1/n2 already scroll with uTime. Coast-surf ribbon (world-dressing)
+  // still draws on top; this is the water-side foam edge.
   '  float swash = 0.5 + 0.5 * sin((worldXZ.x + worldXZ.y) * 0.13 - uTime * 1.35);',
-  '  float foamPattern = smoothstep(0.38, 0.78, swash * 0.55 + n2.z * 0.5);',
-  '  float foam = shore.r * foamPattern * 0.8;',
-  '  colour = mix(colour, uFoamColour, clamp(foam, 0.0, 1.0));',
+  '  float laceNoise = n1.z * 0.5 + n2.z * 0.5;',
+  // Round-2: thin bright waterline only (was 0.62–0.95 → thick uniform
+  // halo). Inner band now hugs shore.r≈1; outer lace is narrower,
+  // sparser (higher noise gate) and fainter (0.28, was 0.55). Swash +
+  // scrolling laceNoise keep both bands animated.
+  '  float innerBand = smoothstep(0.86, 0.98, shore.r);',
+  '  float outerBand = smoothstep(0.45, 0.86, shore.r) * (1.0 - innerBand);',
+  '  float innerFoam = innerBand * smoothstep(0.25, 0.65, swash * 0.45 + laceNoise * 0.65);',
+  '  float outerFoam = outerBand * smoothstep(0.68, 0.95, laceNoise * 0.7 + swash * 0.3) * 0.28;',
+  '  float foam = clamp(innerFoam + outerFoam, 0.0, 1.0);',
+  '  colour = mix(colour, uFoamColour, foam);',
   '  gl_FragColor = vec4(colour, 1.0);',
   '  #include <tonemapping_fragment>',
   '  #include <colorspace_fragment>',
@@ -290,7 +312,14 @@ const SEA_FRAGMENT_SHADER = [
   // the stock 800–6000 m fog washed the mid-distance sea pale pink in
   // sea-chase.jpg v1; the reference keeps blue water to the horizon.
   '  #ifdef USE_FOG',
-  '    float seaFogFactor = smoothstep(fogNear * 1.7, fogFar * 1.55, vFogDepth);',
+  '    #ifdef FOG_EXP2',
+  // Round-2: 0.55 → 0.36 (same FogExp2 structure, less wash) so the
+  // mid-distance sea keeps its blue body to the horizon.
+  '      float seaFogDensity = fogDensity * 0.36;',
+  '      float seaFogFactor = 1.0 - exp(-seaFogDensity * seaFogDensity * vFogDepth * vFogDepth);',
+  '    #else',
+  '      float seaFogFactor = smoothstep(fogNear * 2.2, fogFar * 1.9, vFogDepth);',
+  '    #endif',
   '    gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, seaFogFactor);',
   '  #endif',
   '}',
@@ -367,6 +396,10 @@ export function upgradeSea(scene, world) {
   // The shader specular lane replaces the additive glint quad.
   if (glintMesh) glintMesh.visible = false;
 
+  // seaState.uniforms is the sync surface for the coordinator:
+  // uHorizonColour / uMidColour / uZenithColour (sky reflection),
+  // uSunDirection / uSunColour / uGlintColour (glitter), uDeepColour /
+  // uShallowColour / uFoamColour, plus uTime (advanced by updateSea).
   seaState = { material, uniforms: material.uniforms, mesh: seaMesh, time: 0 };
   return seaState;
 }

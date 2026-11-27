@@ -1,14 +1,18 @@
 // world-dressing.js — ambient scenery layer for the archipelago.
 //
-// Three purely-visual systems live here:
+// Purely-visual systems live here:
 //   1. a foam band traced around every island's real coastline,
-//   2. a high cirrus sheet tinted by the dawn sun,
-//   3. instanced seabird flocks circling the shores.
+//   2. instanced seabird flocks circling the shores,
+//   3. an OPTIONAL landmark-dressing layer (lighthouse lamp glow,
+//      water-tower base props) that activates only when the caller
+//      passes `landmarks` in options — world.js builds the lighthouse
+//      (buildLighthouse) and water tower (buildWaterTower) itself, so
+//      this layer only adds glow/props around those footprints.
 // Nothing in this module collides, scores, or feeds the flight model.
 // The world builder hands over its own height function; animation is a
 // pure function of world time, so any frozen pose is reproducible.
 //
-// Draw budget: surf 1, cirrus 1, birds 3 (instanced). The per-frame
+// Draw budget: surf 1, birds 3 (instanced). The per-frame
 // update allocates nothing — scratch matrices are module-level.
 
 import * as THREE from 'three';
@@ -16,13 +20,10 @@ import * as THREE from 'three';
 const BEARINGS = 144;          // coastline samples per island
 const BAND_IN_M = 4;           // foam band reaches this far up the beach
 const BAND_OUT_M = 26;         // ... and this far out to sea
-const CIRRUS_Y = 2600;         // altitude of the cloud sheet
-const CIRRUS_SPAN = 26000;     // sheet size in metres
-const CIRRUS_TILE = 4200;      // metres covered by one texture tile
 const WINGSPAN = 2.9;          // bird span; big enough to read at judge size
 
 // Small deterministic PRNG (Numerical Recipes LCG) so every machine
-// paints identical foam, cirrus and flock layouts.
+// paints identical foam and flock layouts.
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -158,81 +159,6 @@ function makeSurf(islands, heightAt, seaY) {
   return { mesh, mat, tex, tris: idx.length / 3 };
 }
 
-// --------------------------------------------------------------- cirrus
-
-// Wispy strokes combed in one direction, drawn 3x3-wrapped so the
-// tile repeats seamlessly. White paint; the material colour does the
-// dawn tinting.
-function makeCirrusTexture() {
-  const tex = paintTexture(512, 512, (ctx, w, h) => {
-    const rand = rng(918);
-    ctx.clearRect(0, 0, w, h);
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 70; i++) {
-      const x = rand() * w;
-      const y = rand() * h;
-      const len = 120 + rand() * 260;
-      const bend = (rand() - 0.5) * 40;
-      const strokes = 6 + Math.floor(rand() * 10);
-      for (let s = 0; s < strokes; s++) {
-        const dy = (rand() - 0.5) * 22;
-        ctx.strokeStyle = `rgba(255,255,255,${(0.03 + rand() * 0.07).toFixed(3)})`;
-        ctx.lineWidth = 2 + rand() * 7;
-        for (const ox of [0, -w, w]) {
-          for (const oy of [0, -h, h]) {
-            ctx.beginPath();
-            ctx.moveTo(x + ox, y + dy + oy);
-            ctx.quadraticCurveTo(x + len / 2 + ox, y + dy + bend + oy, x + len + ox, y + dy + bend * 0.4 + oy);
-            ctx.stroke();
-          }
-        }
-      }
-    }
-  });
-  if (tex) {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    const tiles = CIRRUS_SPAN / CIRRUS_TILE;
-    tex.repeat.set(tiles, tiles);
-  }
-  return tex;
-}
-
-// Radial alpha falloff so the sheet's rim never shows against the sky.
-function makeCirrusFade() {
-  return paintTexture(256, 256, (ctx, w) => {
-    const c = w / 2;
-    const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.55, 'rgba(255,255,255,0.85)');
-    g.addColorStop(1, 'rgba(0,0,0,1)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, w);
-  });
-}
-
-function makeCirrus() {
-  const map = makeCirrusTexture();
-  const fade = makeCirrusFade();
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xffd2bd,
-    transparent: true,
-    opacity: 0.48,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  if (map) mat.map = map;
-  if (fade) mat.alphaMap = fade;
-  const geo = new THREE.PlaneGeometry(CIRRUS_SPAN, CIRRUS_SPAN);
-  geo.rotateX(Math.PI / 2); // face downward toward the islands
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'cirrus-veil';
-  mesh.position.y = CIRRUS_Y;
-  mesh.renderOrder = -5; // right after the sky dome
-  mesh.frustumCulled = false;
-  return { mesh, map };
-}
-
 // ---------------------------------------------------------------- birds
 
 // One wing: a swept tapered fan of three triangles, dark at the tip
@@ -350,28 +276,164 @@ function poseFlocks(flock, t) {
   bodies.instanceMatrix.needsUpdate = true;
 }
 
+// ------------------------------------------------------- landmark dressing
+
+// Warm radial glow sprite texture (lighthouse lamp halo).
+function makeLampGlowTexture() {
+  return paintTexture(128, 128, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(255,236,190,1)');
+    g.addColorStop(0.3, 'rgba(255,205,130,0.5)');
+    g.addColorStop(0.65, 'rgba(255,180,100,0.15)');
+    g.addColorStop(1, 'rgba(255,170,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
+}
+
+// Soft dark radial disc for baked contact AO.
+function makeAODiscTexture() {
+  return paintTexture(128, 128, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(14,9,6,0.85)');
+    g.addColorStop(0.55, 'rgba(14,9,6,0.5)');
+    g.addColorStop(0.85, 'rgba(14,9,6,0.18)');
+    g.addColorStop(1, 'rgba(14,9,6,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
+}
+
+// Lighthouse lamp halo + water-tower base dressing (split-rail fence
+// arc, hay bales, AO disc). Positions come from options.landmarks
+// ({ lighthouse: {position}, waterTower: {position} }) — the same
+// landmark records world.js publishes. Heights mirror world.js:
+// lighthouse lamp room sits at 4 bands x 4.5 m + 1.1 m above the
+// group origin (group y = summit - 0.4, landmark y = summit).
+function makeLandmarkDressing(landmarks, heightAt) {
+  const group = new THREE.Group();
+  group.name = 'landmark-dressing';
+  let count = 0;
+  const glowTex = makeLampGlowTexture();
+  const aoTex = makeAODiscTexture();
+
+  const lighthousePos = landmarks && landmarks.lighthouse && landmarks.lighthouse.position;
+  if (lighthousePos) {
+    const mat = new THREE.SpriteMaterial({
+      color: 0xffd9a0, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    if (glowTex) mat.map = glowTex;
+    const halo = new THREE.Sprite(mat);
+    halo.name = 'lighthouse-lamp-halo';
+    halo.position.set(lighthousePos.x, lighthousePos.y + 18.7, lighthousePos.z);
+    halo.scale.set(16, 16, 1);
+    group.add(halo);
+    count++;
+    // AO disc at the tower base.
+    const aoMat = new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0.4, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    if (aoTex) aoMat.map = aoTex;
+    const aoGeo = new THREE.PlaneGeometry(11, 11);
+    aoGeo.rotateX(-Math.PI / 2);
+    const ao = new THREE.Mesh(aoGeo, aoMat);
+    ao.position.set(lighthousePos.x, lighthousePos.y + 0.12, lighthousePos.z);
+    ao.renderOrder = 1;
+    group.add(ao);
+    count++;
+  }
+
+  const waterTowerPos = landmarks && landmarks.waterTower && landmarks.waterTower.position;
+  if (waterTowerPos) {
+    const rand = rng(4242);
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x5a4230, roughness: 0.9, flatShading: true });
+    const strawMat = new THREE.MeshStandardMaterial({ color: 0xc9a86a, roughness: 1.0, flatShading: true });
+    // Split-rail fence arc around the tower base (gap toward +X).
+    const fence = new THREE.Group();
+    const R = 8;
+    const segments = 10;
+    for (let i = 0; i < segments; i++) {
+      const a0 = (i / segments) * Math.PI * 2 + 0.5;
+      const a1 = ((i + 1) / segments) * Math.PI * 2 + 0.5;
+      if (i === 0) continue; // gate gap
+      const x0 = waterTowerPos.x + Math.cos(a0) * R;
+      const z0 = waterTowerPos.z + Math.sin(a0) * R;
+      const x1 = waterTowerPos.x + Math.cos(a1) * R;
+      const z1 = waterTowerPos.z + Math.sin(a1) * R;
+      const y0 = heightAt(x0, z0);
+      const y1 = heightAt(x1, z1);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.15, 0.14), woodMat);
+      post.position.set(x0, y0 + 0.57, z0);
+      fence.add(post);
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      const yaw = Math.atan2(x1 - x0, z1 - z0);
+      for (const ry of [0.62, 1.02]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, len), woodMat);
+        rail.position.set((x0 + x1) / 2, (y0 + y1) / 2 + ry, (z0 + z1) / 2);
+        rail.rotation.y = yaw;
+        fence.add(rail);
+      }
+    }
+    group.add(fence);
+    count++;
+    // Hay bales near the base.
+    for (let i = 0; i < 4; i++) {
+      const a = 1.2 + i * 1.1 + rand() * 0.4;
+      const bx = waterTowerPos.x + Math.cos(a) * (5.5 + rand() * 2);
+      const bz = waterTowerPos.z + Math.sin(a) * (5.5 + rand() * 2);
+      const bale = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.25, 10), strawMat);
+      bale.rotation.z = Math.PI / 2;
+      bale.rotation.y = rand() * Math.PI;
+      bale.position.set(bx, heightAt(bx, bz) + 0.72, bz);
+      group.add(bale);
+      count++;
+    }
+    // AO disc under the tank legs.
+    const aoMat = new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0.4, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    if (aoTex) aoMat.map = aoTex;
+    const aoGeo = new THREE.PlaneGeometry(13, 13);
+    aoGeo.rotateX(-Math.PI / 2);
+    const ao = new THREE.Mesh(aoGeo, aoMat);
+    ao.position.set(waterTowerPos.x, waterTowerPos.y + 0.12, waterTowerPos.z);
+    ao.renderOrder = 1;
+    group.add(ao);
+    count++;
+  }
+  return { group, count };
+}
+
 // ---------------------------------------------------------------- build
 
 /**
  * Build the dressing layer.
  * options: { islands: [{centre, radius}], heightAt(x,z), seaLevel,
- *            flockSpots: [{x, z, altitude, radius, count}] }
+ *            flockSpots: [{x, z, altitude, radius, count}],
+ *            landmarks?: { lighthouse: {position}, waterTower: {position} } }
  * Returns { group, update(timeSeconds, cameraPosition), stats }.
  */
 export function buildWorldDressing(options) {
-  const { islands, heightAt, seaLevel, flockSpots } = options;
+  const { islands, heightAt, seaLevel, flockSpots, landmarks } = options;
   const group = new THREE.Group();
   group.name = 'world-dressing';
 
   const surf = makeSurf(islands, heightAt, seaLevel);
   group.add(surf.mesh);
 
-  const cirrus = makeCirrus();
-  group.add(cirrus.mesh);
-
   const flock = makeFlocks(flockSpots || []);
   group.add(flock.group);
   poseFlocks(flock, 0);
+
+  // Optional landmark dressing (inactive unless landmarks are passed).
+  let landmarkDressing = { group: null, count: 0 };
+  if (landmarks) {
+    landmarkDressing = makeLandmarkDressing(landmarks, heightAt);
+    group.add(landmarkDressing.group);
+  }
 
   function update(timeSeconds, cameraPosition) {
     const t = typeof timeSeconds === 'number' ? timeSeconds : 0;
@@ -381,24 +443,15 @@ export function buildWorldDressing(options) {
       surf.tex.offset.x = (t * 0.012) % 1;
     }
     surf.mat.opacity = 0.88 + Math.sin(t * 0.9 + 1.2) * 0.08;
-    // The cirrus sheet follows the camera so it never ends, but its
-    // texture stays world-pinned (plus a slow high-altitude drift).
-    if (cameraPosition) {
-      cirrus.mesh.position.x = cameraPosition.x;
-      cirrus.mesh.position.z = cameraPosition.z;
-    }
-    if (cirrus.map) {
-      const tiles = CIRRUS_SPAN / CIRRUS_TILE;
-      const wx = cirrus.mesh.position.x + t * 6;
-      const wz = cirrus.mesh.position.z;
-      cirrus.map.offset.set(((wx / CIRRUS_SPAN) * tiles) % 1, ((wz / CIRRUS_SPAN) * tiles) % 1);
-    }
     poseFlocks(flock, t);
   }
 
   return {
     group,
     update,
-    stats: { surfTriangles: surf.tris, birds: flock.birds.length },
+    stats: {
+      surfTriangles: surf.tris, birds: flock.birds.length,
+      landmarkDressing: landmarkDressing.count,
+    },
   };
 }

@@ -32,6 +32,7 @@ import { upgradeSea, updateSea } from './sea.js'; // VD6-SEA: shader sea upgrade
 import { createFxDetail } from './fx-detail.js';
 import { buildAirfieldDressing } from './airfield-dressing.js'; // V6-AIRFIELD tower-reference dressing
 import { createPost } from './post.js'; // VD6-POST: HDR bloom chain (post.js); display only
+import { VEHICLES, renderVehiclePreviews } from './vehicles.js'; // vehicle selection (visuals only)
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -78,6 +79,29 @@ try { upgradeSea(scene, world); } catch (error) { /* VD6-SEA optional: original 
 const aircraft = buildAircraft();
 scene.add(aircraft.group);
 if (aircraft.cockpit) scene.add(aircraft.cockpit);
+// Vehicle selection (visuals only — flight model untouched): persisted
+// choice, wireframe previews for the title panel, exterior swap via
+// aircraft.setVehicle. All guarded: storage/preview failures never
+// block boot, and the default vehicle is the current plane.
+const VEHICLE_STORAGE_KEY = 'aurora-post-vehicle-v1';
+let selectedVehicleId = 'aurora-plane';
+try {
+  const savedVehicle = window.localStorage.getItem(VEHICLE_STORAGE_KEY);
+  if (savedVehicle && VEHICLES.some((v) => v.id === savedVehicle)) selectedVehicleId = savedVehicle;
+} catch (error) { /* storage unavailable — default vehicle */ }
+if (selectedVehicleId !== 'aurora-plane' && typeof aircraft.setVehicle === 'function') {
+  aircraft.setVehicle(selectedVehicleId);
+}
+let vehiclePreviews = {};
+try { vehiclePreviews = renderVehiclePreviews(renderer) || {}; } catch (error) { vehiclePreviews = {}; }
+
+function selectVehicle(vehicleId) {
+  if (!VEHICLES.some((v) => v.id === vehicleId)) return;
+  if (typeof aircraft.setVehicle === 'function' && !aircraft.setVehicle(vehicleId)) return;
+  selectedVehicleId = vehicleId;
+  try { window.localStorage.setItem(VEHICLE_STORAGE_KEY, vehicleId); } catch (error) { /* ignore */ }
+  if (sim.phase === 'menu') hudShowScreen('title', titleData());
+}
 // V6-FX: world-space effects (vapour ribbons, ring sparkles, dust,
 // light pool) — optional dressing, never blocks boot.
 let fxDetail = null;
@@ -281,6 +305,9 @@ function titleData() {
     totalSorties: Array.isArray(MISSIONS) ? MISSIONS.length : 12,
     totalScore: sim.campaign.totalScore,
     soundOn: !muted,
+    vehicles: VEHICLES,
+    vehiclePreviews,
+    selectedVehicleId,
   };
 }
 
@@ -585,6 +612,7 @@ function firstUncompletedMissionId() {
 window.addEventListener('aurora:action', (event) => {
   const detail = event.detail || {};
   if (detail.action === 'selectMission' && detail.missionId) beginSortie(detail.missionId);
+  else if (detail.action === 'selectVehicle' && detail.vehicleId) selectVehicle(detail.vehicleId);
   else if (detail.action === 'launch') launchSortie();
   else if (detail.action === 'freeFlight') beginSortie(FREE_FLIGHT_ID);
   else if (detail.action) handleActions([detail.action]);

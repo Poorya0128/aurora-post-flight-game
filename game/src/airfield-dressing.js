@@ -1,11 +1,17 @@
 // airfield-dressing.js — V6-AIRFIELD detail pass (tower-reference match).
 // One job: dress Aurora Field toward the user's idealised tower view —
 // a detailed wooden hangar/barn (plank walls, sheened metal roof, OPEN
-// gable doors with interior props, lean-to), pine clusters flanking the
-// strip, post-and-rail fences, small outbuildings, crates + barrels,
-// worn-asphalt runway overlay + dirt taxiway/apron, glowing edge-light
-// blocks with ground-glow pools, extra big sunset clouds for the tower
-// sky, a prop ghost-blur disc and warm rim/fill lights. Everything is
+// gable doors with interior props, lean-to, white trim + cupola), a
+// control-tower overlay skinning the world.js tower footprint
+// (panel-seamed shaft, mullioned glass cab with warm glow, balcony,
+// ladder, antenna + blinking red beacon — env8), red-barn outbuildings
+// (vertical red planks, white trim, X-brace + hayloft doors, rusty
+// corrugated roofs — env7), pine clusters flanking the strip,
+// post-and-rail fences, crates + barrels, instanced hay bales / lamp
+// posts / signs with baked AO discs, worn-asphalt runway overlay +
+// dirt taxiway/apron, glowing edge-light blocks with ground-glow
+// pools, extra big sunset clouds for the tower sky, a prop ghost-blur
+// disc and warm rim/fill lights. Everything is
 // code-generated (canvas textures + geometry, no downloaded assets),
 // visual only: nothing here is collidable, scored or read by flight.js
 // (terrain heights and obstacle trees stay frozen in world.js).
@@ -367,6 +373,234 @@ function makeGlowTexture() {
   });
 }
 
+// Red barn siding: vertical boards in weathered barn red, per-board
+// tone, dark gaps, grain streaks, knots, nail dots, bottom grime.
+function makeRedBarnTexture() {
+  const texture = canvasTexture(512, 512, (ctx, w, h) => {
+    const rng = seededRandom(90210);
+    ctx.fillStyle = '#8E2F26';
+    ctx.fillRect(0, 0, w, h);
+    const boards = 8;
+    const bw = w / boards;
+    for (let b = 0; b < boards; b++) {
+      const tone = 0.84 + rng() * 0.34;
+      ctx.fillStyle = 'rgb(' + Math.round(168 * tone) + ',' + Math.round(52 * tone) + ',' + Math.round(42 * tone) + ')';
+      ctx.fillRect(b * bw, 0, bw, h);
+      for (let st = 0; st < 24; st++) {
+        const gx = b * bw + rng() * bw;
+        ctx.fillStyle = rng() > 0.5 ? 'rgba(70,20,14,0.16)' : 'rgba(255,190,160,0.10)';
+        ctx.fillRect(gx, rng() * h * 0.4, 1.4, 60 + rng() * 220);
+      }
+      if (rng() > 0.5) {
+        const kx = b * bw + bw * (0.3 + rng() * 0.4);
+        const ky = rng() * h;
+        ctx.fillStyle = 'rgba(56,18,12,0.55)';
+        ctx.beginPath();
+        ctx.ellipse(kx, ky, 4.5, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(30,10,8,0.85)';
+      ctx.fillRect(b * bw, 0, 3, h);
+      ctx.fillStyle = 'rgba(255,215,195,0.13)';
+      ctx.fillRect(b * bw + 3, 0, 2, h);
+      ctx.fillStyle = 'rgba(30,24,22,0.8)';
+      ctx.beginPath(); ctx.arc(b * bw + bw / 2, 26, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b * bw + bw / 2, h - 26, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+    for (let i = 0; i < 36; i++) {
+      ctx.fillStyle = rng() > 0.5 ? 'rgba(240,200,180,0.06)' : 'rgba(40,16,12,0.08)';
+      ctx.beginPath();
+      ctx.ellipse(rng() * w, rng() * h, 24 + rng() * 60, 10 + rng() * 26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const grime = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    grime.addColorStop(0, 'rgba(28,14,10,0)');
+    grime.addColorStop(1, 'rgba(28,14,10,0.42)');
+    ctx.fillStyle = grime;
+    ctx.fillRect(0, h * 0.72, w, h * 0.28);
+  });
+  if (texture) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+  }
+  return texture;
+}
+
+// Rusty corrugated barn roof: brown-grey ribs, heavy rust weep,
+// seam screws, broad sheen so the low sun still streaks it.
+function makeBarnRoofTexture() {
+  const texture = canvasTexture(512, 256, (ctx, w, h) => {
+    const rng = seededRandom(4471);
+    ctx.fillStyle = '#7A6A5E';
+    ctx.fillRect(0, 0, w, h);
+    const ribs = 14;
+    const ribW = w / ribs;
+    for (let i = 0; i < ribs; i++) {
+      const x = i * ribW;
+      const tone = 0.86 + rng() * 0.28;
+      const grad = ctx.createLinearGradient(x, 0, x + ribW, 0);
+      grad.addColorStop(0, 'rgb(' + Math.round(96 * tone) + ',' + Math.round(84 * tone) + ',' + Math.round(72 * tone) + ')');
+      grad.addColorStop(0.5, 'rgb(' + Math.round(150 * tone) + ',' + Math.round(134 * tone) + ',' + Math.round(114 * tone) + ')');
+      grad.addColorStop(1, 'rgb(' + Math.round(84 * tone) + ',' + Math.round(72 * tone) + ',' + Math.round(60 * tone) + ')');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, 0, ribW, h);
+      ctx.fillStyle = 'rgba(30,24,20,0.7)';
+      ctx.fillRect(x, 0, 2, h);
+    }
+    for (let i = 0; i < 46; i++) {
+      const x = rng() * w;
+      const y = rng() * h * 0.6;
+      const grad = ctx.createLinearGradient(0, y, 0, y + 50 + rng() * 110);
+      grad.addColorStop(0, 'rgba(150,80,40,' + (0.3 + rng() * 0.3).toFixed(2) + ')');
+      grad.addColorStop(1, 'rgba(150,80,40,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y, 3 + rng() * 7, 50 + rng() * 110);
+    }
+    for (let i = 0; i < 900; i++) {
+      ctx.fillStyle = rng() > 0.5 ? 'rgba(255,240,220,0.05)' : 'rgba(30,24,20,0.07)';
+      ctx.fillRect(rng() * w, rng() * h, 2, 2);
+    }
+  });
+  if (texture) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+  }
+  return texture;
+}
+
+// Control-tower shaft skin: off-white painted panels, horizontal +
+// vertical seams, rivet rows, weather streaks, grime at the base.
+function makeTowerShaftTexture() {
+  const texture = canvasTexture(512, 512, (ctx, w, h) => {
+    const rng = seededRandom(8181);
+    ctx.fillStyle = '#E9E4D8';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 60; i++) {
+      ctx.fillStyle = rng() > 0.5 ? 'rgba(190,182,166,0.10)' : 'rgba(255,252,244,0.10)';
+      ctx.beginPath();
+      ctx.ellipse(rng() * w, rng() * h, 30 + rng() * 80, 16 + rng() * 40, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Panel seams: 4 horizontal bands + 2 verticals.
+    ctx.fillStyle = 'rgba(110,104,92,0.65)';
+    for (let b = 1; b < 4; b++) ctx.fillRect(0, (h / 4) * b - 1, w, 3);
+    ctx.fillRect(w / 3 - 1, 0, 3, h);
+    ctx.fillRect((2 * w) / 3 - 1, 0, 3, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    for (let b = 1; b < 4; b++) ctx.fillRect(0, (h / 4) * b + 2, w, 1);
+    // Rivets along the seams.
+    ctx.fillStyle = 'rgba(90,84,74,0.8)';
+    for (let b = 1; b < 4; b++) {
+      for (let x = 12; x < w; x += 24) {
+        ctx.beginPath(); ctx.arc(x, (h / 4) * b - 8, 2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // Weather streaks running down from seams.
+    for (let i = 0; i < 34; i++) {
+      const x = rng() * w;
+      const y = rng() * h * 0.7;
+      ctx.fillStyle = rng() > 0.4 ? 'rgba(150,140,120,0.10)' : 'rgba(120,96,70,0.08)';
+      ctx.fillRect(x, y, 2 + rng() * 5, 40 + rng() * 150);
+    }
+    const grime = ctx.createLinearGradient(0, h * 0.8, 0, h);
+    grime.addColorStop(0, 'rgba(60,52,40,0)');
+    grime.addColorStop(1, 'rgba(60,52,40,0.4)');
+    ctx.fillStyle = grime;
+    ctx.fillRect(0, h * 0.8, w, h * 0.2);
+  });
+  if (texture) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+  }
+  return texture;
+}
+
+// Hay bale wrap: golden straw streaks running around the bale.
+function makeHayBaleTexture() {
+  const texture = canvasTexture(256, 256, (ctx, w, h) => {
+    const rng = seededRandom(6161);
+    ctx.fillStyle = '#C9A86A';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 700; i++) {
+      const y = rng() * h;
+      ctx.strokeStyle = rng() > 0.5 ? 'rgba(150,116,58,0.35)' : 'rgba(238,214,150,0.32)';
+      ctx.lineWidth = 1 + rng() * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(rng() * w * 0.5, y);
+      ctx.lineTo(w * 0.5 + rng() * w * 0.5, y + (rng() - 0.5) * 8);
+      ctx.stroke();
+    }
+    for (const bx of [w * 0.3, w * 0.7]) {
+      ctx.fillStyle = 'rgba(90,66,34,0.35)';
+      ctx.fillRect(bx, 0, 3, h);
+    }
+  });
+  if (texture) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+  }
+  return texture;
+}
+
+// Hay bale end: rolled spiral of straw tones.
+function makeHayBaleEndTexture() {
+  return canvasTexture(256, 256, (ctx, w, h) => {
+    const rng = seededRandom(7171);
+    ctx.fillStyle = '#BE9C5E';
+    ctx.fillRect(0, 0, w, h);
+    const cx = w / 2;
+    const cy = h / 2;
+    for (let r = 124; r > 6; r -= 7) {
+      ctx.strokeStyle = rng() > 0.5 ? 'rgba(150,116,58,0.5)' : 'rgba(238,214,150,0.45)';
+      ctx.lineWidth = 3 + rng() * 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, rng() * 0.6, Math.PI * 2 - rng() * 0.6);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 300; i++) {
+      ctx.fillStyle = rng() > 0.5 ? 'rgba(120,90,44,0.3)' : 'rgba(245,225,165,0.3)';
+      ctx.fillRect(rng() * w, rng() * h, 3, 1.6);
+    }
+  });
+}
+
+// Airfield signs: three stacked boards on one canvas (UV rows).
+function makeSignTexture() {
+  return canvasTexture(512, 384, (ctx, w, h) => {
+    const rows = [
+      ['AURORA FIELD', '#2E3A2E'],
+      ['FUEL →', '#3A2E1E'],
+      ['← PARKING', '#26303A'],
+    ];
+    const rowH = h / rows.length;
+    rows.forEach(([label, bg], i) => {
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, i * rowH, w, rowH);
+      ctx.strokeStyle = '#F2EDE4';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(8, i * rowH + 8, w - 16, rowH - 16);
+      ctx.fillStyle = '#F2EDE4';
+      ctx.font = '800 54px "Segoe UI", system-ui, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, w / 2, i * rowH + rowH / 2 + 2);
+    });
+  });
+}
+
+// Soft dark radial disc for baked contact AO under props/buildings.
+function makeAODiscTexture() {
+  return canvasTexture(128, 128, (ctx, w, h) => {
+    const grad = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
+    grad.addColorStop(0, 'rgba(14,9,6,0.85)');
+    grad.addColorStop(0.55, 'rgba(14,9,6,0.5)');
+    grad.addColorStop(0.85, 'rgba(14,9,6,0.18)');
+    grad.addColorStop(1, 'rgba(14,9,6,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  });
+}
+
 // Prop ghost-blur disc: translucent radial smear + three ghost blades
 // + tip arc, so the spinning prop reads as blur with blade ghosts
 // (reference) instead of a flat dark circle.
@@ -489,8 +723,36 @@ export function buildAirfieldDressing(options) {
     color: 0xffffff, vertexColors: true, roughness: 0.88, metalness: 0.04, flatShading: true,
   });
 
+  const redBarnTexture = makeRedBarnTexture();
+  const redBarnMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.9, metalness: 0.0, flatShading: true,
+  });
+  if (redBarnTexture) redBarnMaterial.map = redBarnTexture;
+  else redBarnMaterial.color.setHex(0xa8322a);
+
+  const barnRoofTexture = makeBarnRoofTexture();
+  const barnRoofMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.55, metalness: 0.5, flatShading: true,
+  });
+  if (barnRoofTexture) barnRoofMaterial.map = barnRoofTexture;
+  else barnRoofMaterial.color.setHex(0x7a6a5e);
+
+  const towerShaftTexture = makeTowerShaftTexture();
+  const towerShaftMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.6, metalness: 0.08, flatShading: true,
+  });
+  if (towerShaftTexture) towerShaftMaterial.map = towerShaftTexture;
+  else towerShaftMaterial.color.setHex(0xe9e4d8);
+
+  const towerGlassMaterial = new THREE.MeshStandardMaterial({
+    color: 0x33434e, emissive: 0xffb45e, emissiveIntensity: 0.85,
+    roughness: 0.22, metalness: 0.15, flatShading: true,
+  });
+
   const woodParts = []; // plank-textured geometries (world space)
   const roofParts = []; // metal-textured geometries (world space)
+  const redParts = []; // red-barn-textured geometries (world space)
+  const barnRoofParts = []; // rusty corrugated geometries (world space)
   const propParts = []; // {geometry, color} vertex-coloured (world space)
 
   // ============================================================ hangar
@@ -570,6 +832,14 @@ export function buildAirfieldDressing(options) {
       ledge.translate(-0.14, ly, -side * 2);
       ledge.applyMatrix4(doorObj.matrix);
       hangarProp(ledge, 0x4a3826);
+    }
+    // X-brace diagonals (barn-door read, env7).
+    for (const diagSign of [-1, 1]) {
+      const diag = new THREE.BoxGeometry(0.1, 0.28, 4.6);
+      diag.rotateX(diagSign * 0.85);
+      diag.translate(-0.14, 2.1, -side * 2);
+      diag.applyMatrix4(doorObj.matrix);
+      hangarProp(diag, 0x4a3826);
     }
   }
   // Roof: two sheened metal slopes + ridge cap.
@@ -687,6 +957,37 @@ export function buildAirfieldDressing(options) {
   }
   hangarProp(place(new THREE.BoxGeometry(0.1, 1.1, 1.5), HW / 2 + 0.16, 3.3, 0), 0x1a2634);
   hangarProp(place(new THREE.BoxGeometry(0.1, 1.0, 1.3), -HW / 2 - 0.16, 3.4, 5.5), 0xffd9a0);
+  // Window side frames + mullion crosses (north wall).
+  for (const wx of [-7, 0, 7]) {
+    for (const fx of [-0.81, 0.81]) {
+      hangarProp(place(new THREE.BoxGeometry(0.12, 1.24, 0.12), wx + fx, 3.3, -HD / 2 - 0.17), 0xf2ede4);
+    }
+    hangarProp(place(new THREE.BoxGeometry(0.07, 1.1, 0.1), wx, 3.3, -HD / 2 - 0.18), 0xf2ede4);
+    hangarProp(place(new THREE.BoxGeometry(1.5, 0.07, 0.1), wx, 3.3, -HD / 2 - 0.18), 0xf2ede4);
+  }
+  // White corner boards + eave fascia (env7 trim read).
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      hangarProp(place(new THREE.BoxGeometry(0.34, WH, 0.34), sx * (HW / 2), WH / 2, sz * (HD / 2)), 0xf2ede4);
+    }
+  }
+  for (const sz of [-1, 1]) {
+    hangarProp(place(new THREE.BoxGeometry(HW + 1.4, 0.3, 0.12), 0, WH + 0.12, sz * (HD / 2 + 0.62)), 0xf2ede4);
+  }
+  // Hayloft door in the west gable above the main doors.
+  hangarProp(place(new THREE.BoxGeometry(0.12, 1.4, 1.2), -HW / 2 - 0.1, WH + 1.1, 0), 0x6e3a2a);
+  hangarProp(place(new THREE.BoxGeometry(0.14, 0.14, 1.44), -HW / 2 - 0.1, WH + 1.87, 0), 0xf2ede4);
+  hangarProp(place(new THREE.BoxGeometry(0.14, 0.14, 1.44), -HW / 2 - 0.1, WH + 0.33, 0), 0xf2ede4);
+  // Ridge cupola with louvres + weathervane (env6 glass-top read).
+  hangarProp(place(new THREE.BoxGeometry(2.2, 0.5, 2.2), 0, WH + PEAK + 0.25, 0), 0xf2ede4);
+  hangarProp(place(new THREE.BoxGeometry(1.8, 1.1, 1.8), 0, WH + PEAK + 1.05, 0), 0x2e3236);
+  hangarProp(place(new THREE.BoxGeometry(1.86, 0.12, 1.86), 0, WH + PEAK + 0.85, 0), 0xf2ede4);
+  hangarProp(place(new THREE.BoxGeometry(1.86, 0.12, 1.86), 0, WH + PEAK + 1.25, 0), 0xf2ede4);
+  const cupolaCap = new THREE.ConeGeometry(1.7, 0.9, 4);
+  cupolaCap.rotateY(Math.PI / 4);
+  hangarProp(place(cupolaCap, 0, WH + PEAK + 2.05, 0), 0xd64541);
+  hangarProp(place(new THREE.BoxGeometry(0.06, 0.9, 0.06), 0, WH + PEAK + 2.9, 0), 0x2e3236);
+  hangarProp(place(new THREE.BoxGeometry(0.9, 0.06, 0.06), 0, WH + PEAK + 3.2, 0), 0x2e3236);
 
   // Warm interior point light (no draw call).
   const hangarLightPos = new THREE.Vector3(0, 3.2, -1).applyMatrix4(hangarMatrix);
@@ -694,7 +995,115 @@ export function buildAirfieldDressing(options) {
   hangarLight.position.copy(hangarLightPos);
   group.add(hangarLight);
 
+  // ============================================================ control tower dressing
+  // world.js builds the tower shell at strip +45/+42 (8-sided shaft
+  // r2.2/2.8 h12, box cab 5x2.6x5 at y13.2, cone roof, beacon sphere
+  // at y16.4). This overlay skins that exact footprint — same centre,
+  // same heights, ~7 cm proud — with the env8 read: panel-seamed
+  // tapered shaft, mullioned glass cab with warm interior glow,
+  // balcony + railing, access ladder, antenna + blinking red beacon.
+  let towerBeaconSpriteMat = null;
+  let towerBeaconMat = null;
+  const towerCentre = stripPoint(45, 42);
+  const towerMatrix = new THREE.Matrix4().compose(
+    new THREE.Vector3(towerCentre.x, E, towerCentre.z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, stripYaw, 0)),
+    new THREE.Vector3(1, 1, 1),
+  );
+  function towerProp(geometry, color) {
+    geometry.applyMatrix4(towerMatrix);
+    propParts.push({ geometry, color });
+  }
+  // Shaft skin + cab glass (own textured/emissive meshes).
+  const towerShaftSkin = new THREE.CylinderGeometry(2.27, 2.87, 12, 8);
+  towerShaftSkin.translate(0, 6, 0);
+  towerShaftSkin.applyMatrix4(towerMatrix);
+  const towerShaftMesh = new THREE.Mesh(towerShaftSkin, towerShaftMaterial);
+  towerShaftMesh.name = 'tower-shaft-skin';
+  towerShaftMesh.castShadow = true;
+  towerShaftMesh.receiveShadow = true;
+  group.add(towerShaftMesh);
+  const towerCabGlassGeo = new THREE.BoxGeometry(5.12, 2.66, 5.12);
+  towerCabGlassGeo.translate(0, 13.2, 0);
+  towerCabGlassGeo.applyMatrix4(towerMatrix);
+  const towerCabMesh = new THREE.Mesh(towerCabGlassGeo, towerGlassMaterial);
+  towerCabMesh.name = 'tower-cab-glass';
+  group.add(towerCabMesh);
+  // Cab mullions + sill/head frames on all four faces.
+  for (const face of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const fx = Math.sin(face);
+    const fz = Math.cos(face);
+    const tx = Math.cos(face);
+    const tz = -Math.sin(face);
+    for (const off of [-1.7, 0, 1.7]) {
+      towerProp(place(new THREE.BoxGeometry(0.13, 2.66, 0.13),
+        fx * 2.58 + tx * off, 13.2, fz * 2.58 + tz * off, face), 0x2e3236);
+    }
+    towerProp(place(new THREE.BoxGeometry(5.3, 0.18, 0.18), fx * 2.58, 14.6, fz * 2.58, face), 0x2e3236);
+    towerProp(place(new THREE.BoxGeometry(5.3, 0.18, 0.18), fx * 2.58, 11.8, fz * 2.58, face), 0x2e3236);
+  }
+  // Balcony deck + railing just below the cab.
+  towerProp(place(new THREE.CylinderGeometry(3.4, 3.4, 0.18, 8), 0, 11.72, 0), 0x3a3f44);
+  for (let post = 0; post < 8; post++) {
+    const a = (post / 8) * Math.PI * 2 + Math.PI / 8;
+    towerProp(place(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 4),
+      Math.cos(a) * 3.25, 12.26, Math.sin(a) * 3.25), 0x2e3236);
+  }
+  const balconyRail = new THREE.TorusGeometry(3.25, 0.05, 4, 24);
+  balconyRail.rotateX(Math.PI / 2);
+  towerProp(place(balconyRail, 0, 12.72, 0), 0x2e3236);
+  // Access ladder up the apron (+Z local) face of the shaft.
+  for (const lx of [-0.3, 0.3]) {
+    towerProp(place(new THREE.BoxGeometry(0.08, 11.2, 0.08), lx, 5.7, 2.72, 0, 0.045, 0), 0x2e3236);
+  }
+  for (let rung = 0; rung < 12; rung++) {
+    towerProp(place(new THREE.BoxGeometry(0.68, 0.07, 0.07), 0, 0.7 + rung * 0.92, 2.72 - rung * 0.04), 0x2e3236);
+  }
+  // Antenna mast + crossbar + dish above the cone roof.
+  towerProp(place(new THREE.CylinderGeometry(0.06, 0.08, 3.4, 5), 0, 17.3, 0), 0x2e3236);
+  towerProp(place(new THREE.BoxGeometry(1.7, 0.08, 0.08), 0, 18.4, 0), 0x2e3236);
+  towerProp(place(new THREE.BoxGeometry(0.08, 0.08, 1.2), 0, 17.9, 0), 0x2e3236);
+  const towerDish = new THREE.SphereGeometry(0.55, 8, 6);
+  towerDish.scale(1, 1, 0.35);
+  towerProp(place(towerDish, 0.55, 17.5, 0, Math.PI / 2), 0xe9e4d8);
+  // Red beacon (emissive sphere + glow sprite, blinked in update).
+  towerBeaconMat = new THREE.MeshStandardMaterial({
+    color: 0x551111, emissive: 0xff2a22, emissiveIntensity: 2.4, roughness: 0.4,
+  });
+  const towerBeaconGeo = new THREE.SphereGeometry(0.2, 10, 8);
+  towerBeaconGeo.translate(0, 19.1, 0);
+  towerBeaconGeo.applyMatrix4(towerMatrix);
+  const towerBeaconMesh = new THREE.Mesh(towerBeaconGeo, towerBeaconMat);
+  towerBeaconMesh.name = 'tower-beacon';
+  group.add(towerBeaconMesh);
+  const towerGlowTexture = makeGlowTexture();
+  const towerCabGlowMat = new THREE.SpriteMaterial({
+    color: 0xffc98a, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  if (towerGlowTexture) towerCabGlowMat.map = towerGlowTexture;
+  const towerCabGlow = new THREE.Sprite(towerCabGlowMat);
+  towerCabGlow.position.set(0, 13.2, 0).applyMatrix4(towerMatrix);
+  towerCabGlow.scale.set(9, 9, 1);
+  group.add(towerCabGlow);
+  towerBeaconSpriteMat = new THREE.SpriteMaterial({
+    color: 0xff4438, transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  if (towerGlowTexture) towerBeaconSpriteMat.map = towerGlowTexture;
+  const towerBeaconGlow = new THREE.Sprite(towerBeaconSpriteMat);
+  towerBeaconGlow.position.set(0, 19.1, 0).applyMatrix4(towerMatrix);
+  towerBeaconGlow.scale.set(3.4, 3.4, 1);
+  group.add(towerBeaconGlow);
+  const towerLight = new THREE.PointLight(0xffb45e, 20, 18, 2);
+  towerLight.position.set(0, 13.2, 0).applyMatrix4(towerMatrix);
+  group.add(towerLight);
+
   // ============================================================ outbuildings
+  // Red-barn outbuilding (env7): vertical red planks, white corner
+  // boards + frames, X-brace door, hayloft door in the gable, rusty
+  // corrugated roof with overhang + fascia, chimney. Same footprint
+  // and placement as the sheds it replaces.
   function shed(along, across, w, d, wallH, yawExtra) {
     const p = stripPoint(along, across);
     const baseY = groundY(p.x, p.z) - 0.12;
@@ -703,28 +1112,68 @@ export function buildAirfieldDressing(options) {
       new THREE.Quaternion().setFromEuler(new THREE.Euler(0, stripYaw + (yawExtra || 0), 0)),
       new THREE.Vector3(1, 1, 1),
     );
+    function barnRed(geometry) { geometry.applyMatrix4(m); redParts.push(geometry); }
+    function barnProp(geometry, color) { geometry.applyMatrix4(m); propParts.push({ geometry, color }); }
     const walls = plankBox(w, wallH, d);
     place(walls, 0, wallH / 2, 0);
-    walls.applyMatrix4(m);
-    woodParts.push(walls);
+    barnRed(walls);
     const rise = d * 0.34;
-    const sLen = Math.sqrt((d / 2 + 0.4) ** 2 + rise ** 2);
-    const sAng = Math.atan2(rise, d / 2 + 0.4);
-    for (const side of [-1, 1]) {
-      const panel = new THREE.BoxGeometry(w + 0.8, 0.12, sLen);
-      scaleUV(panel, (w + 0.8) / 7, sLen / 7);
-      place(panel, 0, wallH + rise / 2, side * (d / 4 + 0.1), 0, side * sAng, 0);
-      panel.applyMatrix4(m);
-      roofParts.push(panel);
+    // Gable infill triangles (both ends).
+    for (const endX of [-w / 2, w / 2]) {
+      const shape = new THREE.Shape();
+      shape.moveTo(-d / 2, 0);
+      shape.lineTo(d / 2, 0);
+      shape.lineTo(0, rise);
+      shape.closePath();
+      const gable = new THREE.ExtrudeGeometry(shape, { depth: 0.24, bevelEnabled: false });
+      scaleUV(gable, 0.22, 0.22);
+      gable.rotateY(Math.PI / 2);
+      gable.translate(endX - 0.12, wallH, 0);
+      barnRed(gable);
     }
-    const door = new THREE.BoxGeometry(0.9, 1.9, 0.1);
-    place(door, -w / 4, 0.95, -d / 2 - 0.06);
-    door.applyMatrix4(m);
-    propParts.push({ geometry: door, color: 0x1a2634 });
-    const win = new THREE.BoxGeometry(0.8, 0.7, 0.1);
-    place(win, w / 4, 1.7, -d / 2 - 0.06);
-    win.applyMatrix4(m);
-    propParts.push({ geometry: win, color: 0xffd9a0 });
+    const sLen = Math.sqrt((d / 2 + 0.55) ** 2 + rise ** 2);
+    const sAng = Math.atan2(rise, d / 2 + 0.55);
+    for (const side of [-1, 1]) {
+      const panel = new THREE.BoxGeometry(w + 1.0, 0.12, sLen);
+      scaleUV(panel, (w + 1.0) / 7, sLen / 7);
+      place(panel, 0, wallH + rise / 2 + 0.04, side * (d / 4 + 0.14), 0, side * sAng, 0);
+      panel.applyMatrix4(m);
+      barnRoofParts.push(panel);
+      // White fascia along the eave.
+      barnProp(place(new THREE.BoxGeometry(w + 1.0, 0.22, 0.1), 0, wallH + 0.02, side * (d / 2 + 0.5)), 0xf2ede4);
+    }
+    // White corner boards.
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        barnProp(place(new THREE.BoxGeometry(0.2, wallH, 0.2), sx * (w / 2), wallH / 2, sz * (d / 2)), 0xf2ede4);
+      }
+    }
+    // X-brace door on the strip (-Z local) face, white frame.
+    barnProp(place(new THREE.BoxGeometry(1.1, 2.0, 0.1), -w / 4, 1.0, -d / 2 - 0.06), 0x7a2a20);
+    barnProp(place(new THREE.BoxGeometry(1.3, 0.14, 0.12), -w / 4, 2.05, -d / 2 - 0.07), 0xf2ede4);
+    for (const fx of [-0.62, 0.62]) {
+      barnProp(place(new THREE.BoxGeometry(0.14, 2.1, 0.12), -w / 4 + fx, 1.05, -d / 2 - 0.07), 0xf2ede4);
+    }
+    for (const diagSign of [-1, 1]) {
+      const diag = new THREE.BoxGeometry(0.12, 2.3, 0.08);
+      diag.rotateZ(diagSign * 0.5);
+      place(diag, -w / 4, 1.0, -d / 2 - 0.13);
+      barnProp(diag, 0xf2ede4);
+    }
+    barnProp(place(new THREE.BoxGeometry(1.1, 0.14, 0.08), -w / 4, 1.0, -d / 2 - 0.13), 0xf2ede4);
+    // Hayloft door in the west gable.
+    barnProp(place(new THREE.BoxGeometry(0.1, 0.9, 0.8), -w / 2 - 0.08, wallH + rise * 0.42, 0), 0x7a2a20);
+    barnProp(place(new THREE.BoxGeometry(0.12, 0.12, 1.0), -w / 2 - 0.08, wallH + rise * 0.42 + 0.51, 0), 0xf2ede4);
+    barnProp(place(new THREE.BoxGeometry(0.12, 0.12, 1.0), -w / 2 - 0.08, wallH + rise * 0.42 - 0.51, 0), 0xf2ede4);
+    // Window with white frame + mullions, warm-lit.
+    barnProp(place(new THREE.BoxGeometry(0.8, 0.7, 0.1), w / 4, 1.7, -d / 2 - 0.06), 0xffd9a0);
+    barnProp(place(new THREE.BoxGeometry(0.96, 0.12, 0.12), w / 4, 2.11, -d / 2 - 0.07), 0xf2ede4);
+    barnProp(place(new THREE.BoxGeometry(0.96, 0.12, 0.12), w / 4, 1.29, -d / 2 - 0.07), 0xf2ede4);
+    barnProp(place(new THREE.BoxGeometry(0.07, 0.7, 0.11), w / 4, 1.7, -d / 2 - 0.08), 0xf2ede4);
+    barnProp(place(new THREE.BoxGeometry(0.8, 0.07, 0.11), w / 4, 1.7, -d / 2 - 0.08), 0xf2ede4);
+    // Brick chimney + cap through the roof slope.
+    barnProp(place(new THREE.BoxGeometry(0.45, 1.5, 0.45), w / 4, wallH + rise * 0.75, -d / 5), 0x8a5a48);
+    barnProp(place(new THREE.BoxGeometry(0.6, 0.14, 0.6), w / 4, wallH + rise * 0.75 + 0.8, -d / 5), 0x6e6a62);
   }
   shed(-98, 36, 5.2, 4.2, 2.9, 0.18); // small outbuilding, west foreground
   shed(72, 47, 4.4, 3.6, 2.6, -0.12); // fuel store east of the tower
@@ -775,6 +1224,18 @@ export function buildAirfieldDressing(options) {
   roofMesh.castShadow = true;
   roofMesh.receiveShadow = true;
   group.add(roofMesh);
+
+  const redMesh = new THREE.Mesh(mergeGeometries(redParts), redBarnMaterial);
+  redMesh.name = 'airfield-red-barns';
+  redMesh.castShadow = true;
+  redMesh.receiveShadow = true;
+  group.add(redMesh);
+
+  const barnRoofMesh = new THREE.Mesh(mergeGeometries(barnRoofParts), barnRoofMaterial);
+  barnRoofMesh.name = 'airfield-barn-roofs';
+  barnRoofMesh.castShadow = true;
+  barnRoofMesh.receiveShadow = true;
+  group.add(barnRoofMesh);
 
   const propsMesh = new THREE.Mesh(mergeColored(propParts), propsMaterial);
   propsMesh.name = 'airfield-props';
@@ -856,6 +1317,195 @@ export function buildAirfieldDressing(options) {
   pines.frustumCulled = false;
   group.add(pines);
 
+  // ============================================================ farm props
+  // Instanced hay bales (straw wrap + spiral ends), lamp posts with
+  // emissive heads, small airfield signs, and one instanced set of
+  // baked AO discs grounding bales/lamps/signs/barns/tower/hangar.
+  // Small props cast no shadows (contact-shadow.js skips them too).
+  const baleTexture = makeHayBaleTexture();
+  const baleMaterial = new THREE.MeshStandardMaterial({ roughness: 1.0, metalness: 0.0 });
+  if (baleTexture) baleMaterial.map = baleTexture;
+  else baleMaterial.color.setHex(0xc9a86a);
+  const baleEndTexture = makeHayBaleEndTexture();
+  const baleEndMaterial = new THREE.MeshStandardMaterial({ roughness: 1.0, metalness: 0.0 });
+  if (baleEndTexture) baleEndMaterial.map = baleEndTexture;
+  else baleEndMaterial.color.setHex(0xbe9c5e);
+  const baleBodyGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.25, 12, 1, true);
+  baleBodyGeo.rotateZ(Math.PI / 2); // axis along X: bale lying on its side
+  const capL = new THREE.CircleGeometry(0.75, 12);
+  capL.rotateY(-Math.PI / 2);
+  capL.translate(-0.625, 0, 0);
+  const capR = new THREE.CircleGeometry(0.75, 12);
+  capR.rotateY(Math.PI / 2);
+  capR.translate(0.625, 0, 0);
+  const baleCapsGeo = mergeGeometries([capL, capR]);
+  const baleSpots = [];
+  const baleClusters = [
+    [-98, 36, 6, 11], [72, 47, 5, 10], [-52, 68, 6, 13],
+    [12, 76, 5, 13], [-122, 58, 4, 11], [96, 62, 4, 11],
+  ];
+  for (const [ca, cc, n, spread] of baleClusters) {
+    for (let i = 0; i < n; i++) {
+      const along = ca + (rng() + rng() - 1) * spread;
+      const across = cc + (rng() + rng() - 1) * spread * 0.7;
+      if (Math.abs(across) < 20) continue; // keep the strip clear
+      const bp = stripPoint(along, across);
+      baleSpots.push({ x: bp.x, y: groundY(bp.x, bp.z) + 0.72, z: bp.z, yaw: rng() * Math.PI * 2 });
+    }
+  }
+  const bales = new THREE.InstancedMesh(baleBodyGeo, baleMaterial, Math.max(1, baleSpots.length));
+  bales.name = 'airfield-hay-bales';
+  const baleCaps = new THREE.InstancedMesh(baleCapsGeo, baleEndMaterial, Math.max(1, baleSpots.length));
+  baleCaps.name = 'airfield-hay-bale-ends';
+  for (let i = 0; i < baleSpots.length; i++) {
+    const b = baleSpots[i];
+    _p.set(b.x, b.y, b.z);
+    _e.set(0, b.yaw, 0);
+    _q.setFromEuler(_e);
+    _s.set(1, 1, 1);
+    _m.compose(_p, _q, _s);
+    bales.setMatrixAt(i, _m);
+    baleCaps.setMatrixAt(i, _m);
+  }
+  bales.instanceMatrix.needsUpdate = true;
+  baleCaps.instanceMatrix.needsUpdate = true;
+  bales.receiveShadow = true;
+  bales.frustumCulled = false;
+  baleCaps.frustumCulled = false;
+  group.add(bales);
+  group.add(baleCaps);
+
+  // Lamp posts: dark pole + arm (vertex-coloured) and a separate
+  // emissive head instanced mesh; glow pools join the glow pass below.
+  const lampPostGeo = mergeColored([
+    { geometry: place(new THREE.CylinderGeometry(0.07, 0.1, 3.4, 6), 0, 1.7, 0), color: 0x2e3236 },
+    { geometry: place(new THREE.BoxGeometry(0.08, 0.08, 1.0), 0, 3.38, 0.45), color: 0x2e3236 },
+    { geometry: place(new THREE.BoxGeometry(0.36, 0.14, 0.55), 0, 3.3, 0.85), color: 0x23262a },
+  ]);
+  const lampHeadGeo = new THREE.BoxGeometry(0.26, 0.08, 0.42);
+  lampHeadGeo.translate(0, 3.22, 0.85);
+  const lampHeadMaterial = new THREE.MeshStandardMaterial({
+    color: 0x442f16, emissive: 0xffc98a, emissiveIntensity: 1.9, roughness: 0.4,
+  });
+  const lampSpots = [];
+  const lampAlongAcross = [
+    [-30, 14], [-30, 24], [-30, 34], [-30, 44], // taxiway
+    [-52, 47], [-38, 47], [-22, 47], [-8, 47], // apron frontage
+    [38, 34], [52, 50], // tower path
+  ];
+  for (const [la, lc] of lampAlongAcross) {
+    const lp = stripPoint(la, lc);
+    lampSpots.push({ x: lp.x, y: groundY(lp.x, lp.z), z: lp.z, yaw: stripYaw + Math.PI });
+  }
+  const lampPosts = new THREE.InstancedMesh(lampPostGeo, propsMaterial, lampSpots.length);
+  lampPosts.name = 'airfield-lamp-posts';
+  const lampHeads = new THREE.InstancedMesh(lampHeadGeo, lampHeadMaterial, lampSpots.length);
+  lampHeads.name = 'airfield-lamp-heads';
+  for (let i = 0; i < lampSpots.length; i++) {
+    const l = lampSpots[i];
+    _p.set(l.x, l.y, l.z);
+    _e.set(0, l.yaw, 0);
+    _q.setFromEuler(_e);
+    _s.set(1, 1, 1);
+    _m.compose(_p, _q, _s);
+    lampPosts.setMatrixAt(i, _m);
+    lampHeads.setMatrixAt(i, _m);
+  }
+  lampPosts.instanceMatrix.needsUpdate = true;
+  lampHeads.instanceMatrix.needsUpdate = true;
+  lampPosts.frustumCulled = false;
+  lampHeads.frustumCulled = false;
+  group.add(lampPosts);
+  group.add(lampHeads);
+
+  // Signs: merged posts/boards + merged textured faces (UV rows).
+  const signTexture = makeSignTexture();
+  const signMaterial = new THREE.MeshStandardMaterial({
+    roughness: 0.7, metalness: 0.05, side: THREE.DoubleSide,
+  });
+  if (signTexture) signMaterial.map = signTexture;
+  else signMaterial.color.setHex(0x2e3a2e);
+  const signSpots = [
+    { along: -30, across: 11, row: 0 },
+    { along: -14, across: 44, row: 1 },
+    { along: 36, across: 33, row: 2 },
+  ];
+  const signFrameParts = [];
+  const signFaceParts = [];
+  for (const sign of signSpots) {
+    const sp = stripPoint(sign.along, sign.across);
+    const sy = groundY(sp.x, sp.z);
+    const sm = new THREE.Matrix4().compose(
+      new THREE.Vector3(sp.x, sy, sp.z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, stripYaw, 0)),
+      new THREE.Vector3(1, 1, 1),
+    );
+    for (const px of [-0.7, 0.7]) {
+      const post = new THREE.BoxGeometry(0.1, 1.5, 0.1);
+      place(post, px, 0.75, 0);
+      post.applyMatrix4(sm);
+      signFrameParts.push({ geometry: post, color: 0x4a3826 });
+    }
+    const board = new THREE.BoxGeometry(1.9, 0.7, 0.07);
+    place(board, 0, 1.35, 0);
+    board.applyMatrix4(sm);
+    signFrameParts.push({ geometry: board, color: 0x2e3236 });
+    const face = new THREE.PlaneGeometry(1.8, 0.62);
+    const fuv = face.attributes.uv;
+    for (let vi = 0; vi < fuv.count; vi++) {
+      fuv.setY(vi, (fuv.getY(vi) + (2 - sign.row)) / 3);
+    }
+    place(face, 0, 1.35, -0.045, Math.PI);
+    face.applyMatrix4(sm);
+    signFaceParts.push(face);
+  }
+  const signFrames = new THREE.Mesh(mergeColored(signFrameParts), propsMaterial);
+  signFrames.name = 'airfield-sign-frames';
+  group.add(signFrames);
+  const signFaces = new THREE.Mesh(mergeGeometries(signFaceParts), signMaterial);
+  signFaces.name = 'airfield-sign-faces';
+  group.add(signFaces);
+
+  // Baked AO discs under props + buildings (contact-shadow.js also
+  // blobs casters scene-wide; these guarantee grounding for the
+  // non-casting small props and read at any shadow-map range).
+  const aoTexture = makeAODiscTexture();
+  const aoMaterial = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.4, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  if (aoTexture) aoMaterial.map = aoTexture;
+  const aoGeo = new THREE.PlaneGeometry(1, 1);
+  aoGeo.rotateX(-Math.PI / 2);
+  const aoSpots = [];
+  for (const b of baleSpots) aoSpots.push({ x: b.x, y: b.y - 0.62, z: b.z, sx: 2.4, sz: 2.4 });
+  for (const l of lampSpots) aoSpots.push({ x: l.x, y: l.y + 0.1, z: l.z, sx: 1.7, sz: 1.7 });
+  for (const sign of signSpots) {
+    const sp = stripPoint(sign.along, sign.across);
+    aoSpots.push({ x: sp.x, y: groundY(sp.x, sp.z) + 0.1, z: sp.z, sx: 2.6, sz: 2.6 });
+  }
+  aoSpots.push({ x: towerCentre.x, y: E + 0.1, z: towerCentre.z, sx: 9.5, sz: 9.5 });
+  aoSpots.push({ x: hangarCentre.x, y: E + 0.1, z: hangarCentre.z, sx: 27, sz: 19 });
+  for (const [ba, bc, bw2, bd2] of [[-98, 36, 5.2, 4.2], [72, 47, 4.4, 3.6]]) {
+    const bp2 = stripPoint(ba, bc);
+    aoSpots.push({ x: bp2.x, y: groundY(bp2.x, bp2.z) + 0.1, z: bp2.z, sx: bw2 + 3, sz: bd2 + 3 });
+  }
+  const aoDiscs = new THREE.InstancedMesh(aoGeo, aoMaterial, aoSpots.length);
+  aoDiscs.name = 'airfield-ao-discs';
+  aoDiscs.renderOrder = 1;
+  aoDiscs.frustumCulled = false;
+  for (let i = 0; i < aoSpots.length; i++) {
+    const a = aoSpots[i];
+    _p.set(a.x, a.y, a.z);
+    _e.set(0, stripYaw, 0);
+    _q.setFromEuler(_e);
+    _s.set(a.sx, 1, a.sz);
+    _m.compose(_p, _q, _s);
+    aoDiscs.setMatrixAt(i, _m);
+  }
+  aoDiscs.instanceMatrix.needsUpdate = true;
+  group.add(aoDiscs);
+
   // ============================================================ edge lights + glow
   const edgeLightPositions = [];
   for (const strip of world.strips) {
@@ -902,7 +1552,7 @@ export function buildAirfieldDressing(options) {
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
   if (glowTexture) glowMaterial.map = glowTexture;
-  const glowCount = edgeLightPositions.length + 3;
+  const glowCount = edgeLightPositions.length + 3 + lampSpots.length;
   const glows = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), glowMaterial, glowCount);
   glows.name = 'airfield-glows';
   glows.renderOrder = 3;
@@ -933,6 +1583,16 @@ export function buildAirfieldDressing(options) {
     _s.set(6.5, 6.5, 1);
     _m.compose(_p, _q, _s);
     glows.setMatrixAt(edgeLightPositions.length + 1 + k, _m);
+  }
+  // Lamp-post ground pools.
+  for (let k = 0; k < lampSpots.length; k++) {
+    const l = lampSpots[k];
+    _p.set(l.x, l.y + 0.16, l.z);
+    _e.set(-Math.PI / 2, 0, 0);
+    _q.setFromEuler(_e);
+    _s.set(5.2, 5.2, 1);
+    _m.compose(_p, _q, _s);
+    glows.setMatrixAt(edgeLightPositions.length + 3 + k, _m);
   }
   glows.instanceMatrix.needsUpdate = true;
   group.add(glows);
@@ -1062,6 +1722,16 @@ export function buildAirfieldDressing(options) {
     // Edge-light glow breathes very slightly (static in shot mode: dt 0
     // from a frozen pose still shows the base opacity).
     glowMaterial.opacity = 0.5 + Math.sin(time * 1.7) * 0.05;
+    // Tower beacon blink (steady-on in frozen shot poses: step 0
+    // keeps the initial bright opacity).
+    if (towerBeaconSpriteMat) {
+      const blinkTarget = Math.sin(time * 2.6) > 0.2 ? 0.95 : 0.06;
+      towerBeaconSpriteMat.opacity += (blinkTarget - towerBeaconSpriteMat.opacity)
+        * Math.min(1, step * 10);
+      if (towerBeaconMat) {
+        towerBeaconMat.emissiveIntensity = 0.4 + towerBeaconSpriteMat.opacity * 2.2;
+      }
+    }
     if (propDisc && plane) {
       const throttle = typeof plane.throttle === 'number' ? plane.throttle : 0;
       const running = plane.engineOn !== false && throttle > 0.02;
@@ -1074,7 +1744,12 @@ export function buildAirfieldDressing(options) {
   }
   update(0, null);
 
-  const drawCalls = 2 /* wood+roof */ + 1 /* props */ + 1 /* pines */
+  const drawCalls = 2 /* wood+roof */ + 2 /* red barns + barn roofs */
+    + 1 /* props */ + 1 /* pines */
+    + 2 /* tower shaft skin + cab glass */ + 1 /* tower beacon */
+    + 2 /* tower glow sprites */ + 2 /* bales + ends */
+    + 2 /* lamp posts + heads */ + 2 /* sign frames + faces */
+    + 1 /* AO discs */
     + (edgeBlocks ? 1 : 0) + 1 /* glow */ + 1 /* overlay */ + 1 /* dirt */
     + 1 /* clouds */ + (propDisc ? 1 : 0);
 
@@ -1086,6 +1761,11 @@ export function buildAirfieldDressing(options) {
       airfieldDrawCalls: drawCalls - 1 /* clouds */ - (propDisc ? 1 : 0),
       pines: pineSpots.length,
       edgeLights: edgeLightPositions.length,
+      towerDressed: true,
+      bales: baleSpots.length,
+      lamps: lampSpots.length,
+      signs: signSpots.length,
+      aoDiscs: aoSpots.length,
       hidOldHangar,
       hidOldMarkers,
     },

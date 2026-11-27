@@ -1976,6 +1976,680 @@ body > div[role="dialog"] h2 { color: #eaffff !important; text-shadow: var(--glo
 }
 /* === END CONCEPT: HUD FULL === */
 
+/* =====================================================================
+   HUD-V2 SECTION OVERRIDES — appended after the HUD FULL block
+   Order: top.css, center.css, tapes.css, bottom.css
+   ===================================================================== */
+
+/* ----- sections/top.css ----- */
+/* =====================================================================
+   AURORA POST — HUD FULL · TOP SECTION (Zones 1–3) refined
+   Target: 1000081522_1_wpqr.jpg (dark glass pills, cyan/amber accents)
+   Load AFTER concept-ui-base.css. Overrides top-zone rules only;
+   same DOM classes as hud-full-base.js / sections/top.js.
+   ===================================================================== */
+
+/* Screws read as clutter against the target — hide in top zones. */
+.hf-tl .hf-screw,
+.hf-tc .hf-screw,
+.hf-tr .hf-screw { display: none; }
+
+/* ---------- ZONE 1: TOP-LEFT ---------- */
+/* Row 1 becomes ONE continuous pill: CLIMB chip + AP/A/T/FD with
+   hairline dividers, exactly as the target. */
+.hf-tl > .hf-row:first-child {
+  align-items: center;
+  gap: 0;
+  padding: 4px 6px 4px 4px;
+  background: rgba(10, 18, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 6px 20px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.hf-chip-mode {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(62, 242, 255, 0.08);
+  font-size: 14px;
+  letter-spacing: 0.14em;
+}
+/* AP group melts into the pill (no own box). */
+.hf-ap-group {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  gap: 0;
+  padding: 0 4px 0 10px;
+}
+.hf-ap-chip { padding: 0 10px; font-size: 12.5px; }
+.hf-ap-chip + .hf-ap-chip { border-left: 1px solid rgba(255, 255, 255, 0.16); }
+.hf-ap-chip .hf-ap-name { color: rgba(255, 255, 255, 0.85); }
+.hf-ap-chip.hf-off .hf-ap-state { color: #ff6b5a; text-shadow: 0 0 7px rgba(255, 107, 90, 0.45); }
+.hf-ap-chip.hf-on .hf-ap-state { color: var(--hf-green); }
+
+/* Row 2: WIND card + OAT/QNH as two separate mini-cards.
+   DOM keeps one .hf-oat-panel; CSS turns it into a transparent row
+   and each .hf-kv into its own card (label over value). */
+.hf-wind-panel { flex: 1 1 auto; padding: 7px 12px; }
+.hf-wind-panel .hf-label { font-size: 9.5px; letter-spacing: 0.16em; }
+.hf-wind-panel .hf-value { font-size: 15px; }
+.hf-wind-arrow svg { width: 16px; height: 16px; }
+.hf-oat-panel {
+  flex-direction: row;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.hf-oat-panel .hf-kv {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  background: rgba(10, 18, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 6px 20px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.hf-oat-panel .hf-label { font-size: 9.5px; letter-spacing: 0.16em; }
+.hf-oat-panel .hf-value { font-size: 14px; }
+
+/* ---------- ZONE 2: TOP-CENTRE ---------- */
+/* Capsule: clock + time | SCORE label+number | amber combo,
+   amber wash bleeding in from the right end (target look). */
+.hf-tc { gap: 0; }
+.hf-capsule {
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: linear-gradient(90deg, rgba(10, 18, 28, 0.78) 52%, rgba(120, 78, 12, 0.55) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 2;
+}
+.hf-cap-clock { display: inline-flex; color: rgba(255, 255, 255, 0.65); }
+.hf-cap-time { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; }
+.hf-cap-sep {
+  width: 1px;
+  height: 15px;
+  background: rgba(255, 255, 255, 0.18);
+  flex: 0 0 auto;
+}
+.hf-cap-score { display: inline-flex; align-items: baseline; gap: 5px; }
+.hf-cap-score-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--hf-label);
+}
+.hf-cap-score-value { font-size: 15px; font-weight: 800; color: #ffffff; }
+.hf-cap-combo { font-size: 11.5px; letter-spacing: 0.04em; color: #ffc832; text-shadow: 0 0 9px rgba(255, 200, 50, 0.55); }
+
+/* Mission card: left-aligned, tucked under the capsule, divider
+   above the checklist, cyan (not green) checked boxes. */
+.hf-mission-card {
+  width: 76%;
+  margin-top: -5px;
+  padding: 8px 11px 7px;
+  border-radius: 0 0 10px 10px;
+  background: rgba(10, 18, 28, 0.72);
+}
+.hf-mission-title { text-align: left; font-size: 11.5px; letter-spacing: 0.06em; }
+.hf-mission-title::before,
+.hf-mission-title::after { content: none; }
+.hf-mission-sub { text-align: left; font-size: 10.5px; color: rgba(255, 255, 255, 0.62); margin-top: 1px; }
+.hf-goal { font-size: 10.5px; margin-top: 4px; color: rgba(255, 255, 255, 0.88); }
+.hf-goal:first-of-type { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.hf-goal-box {
+  width: 13px; height: 13px;
+  border-color: rgba(255, 255, 255, 0.45);
+  border-radius: 3px;
+  color: var(--hf-cyan);
+}
+.hf-goal.hf-goal-done { color: rgba(255, 255, 255, 0.92); }
+.hf-goal.hf-goal-done .hf-goal-box {
+  background: rgba(62, 242, 255, 0.10);
+  border-color: var(--hf-cyan);
+  box-shadow: 0 0 8px rgba(62, 242, 255, 0.45);
+}
+
+/* ---------- ZONE 3: TOP-RIGHT ---------- */
+/* Heading: bare tape on sky — panel box removed, value is plain
+   large text above the tape (target: "128°" over 090/120/150). */
+.hf-hdg-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.hf-hdg-value {
+  position: static;
+  transform: none;
+  order: -1;
+  align-self: center;
+  padding: 0 0 2px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
+.hf-hdg-canvas { height: 46px; }
+
+/* Destination card: three columns (label over value) with dividers,
+   values white as in the target (RWY — | DIST 850 m | ETA 0:19). */
+.hf-dest-card {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  padding: 7px 6px;
+  background: rgba(10, 18, 28, 0.78);
+  border-radius: 10px;
+}
+.hf-dest-card .hf-kv {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 12px;
+}
+.hf-dest-card .hf-kv + .hf-kv { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.hf-dest-card .hf-label { font-size: 9.5px; letter-spacing: 0.16em; }
+.hf-dest-card .hf-value,
+.hf-dest-card .hf-value.hf-cyan { color: #ffffff; font-size: 14px; }
+
+/* ---------- Compact stages (mirror base breakpoint) ---------- */
+@media (max-width: 900px), (max-height: 560px) {
+  .hf-chip-mode { font-size: 11px; padding: 5px 9px; }
+  .hf-ap-chip { font-size: 10px; padding: 0 6px; }
+  .hf-ap-group { padding-left: 6px; }
+  .hf-wind-panel .hf-value,
+  .hf-oat-panel .hf-value { font-size: 12px; }
+  .hf-oat-panel .hf-kv { padding: 4px 7px; }
+  .hf-cap-time,
+  .hf-cap-score-value { font-size: 13px; }
+  .hf-cap-combo { font-size: 10px; }
+  .hf-cap-sep { height: 14px; }
+  .hf-mission-card { padding: 9px 10px 7px; }
+  .hf-hdg-value { font-size: 16px; }
+  .hf-hdg-canvas { height: 38px; }
+  .hf-dest-card .hf-kv { padding: 0 8px; }
+  .hf-dest-card .hf-value { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-wind-arrow { transition: none; }
+}
+
+/* ----- sections/center.css ----- */
+/* === HUD FULL — CENTER SECTION (sections/center.css) ===
+   Pairs with sections/center.js (Zone 4 centre guidance). Load AFTER
+   concept-ui-base.css. The centre is drawn entirely on canvas
+   (pitch ladder, bank arc, FPV, camera pill); this file only tunes
+   the canvas compositing so the per-element canvas glow (cyan horizon
+   / FPV / apex marker) reads as the subtle reference glow instead of
+   a uniform halo over the thin white ladder. No layout changes. */
+
+.hf-guide-canvas {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 4px rgba(62, 242, 255, 0.18));
+}
+
+/* === END HUD FULL — CENTER SECTION === */
+
+/* ----- sections/tapes.css ----- */
+/* === HUD FULL · TAPES REFINED (sections/tapes.css) ===
+   Load AFTER concept-ui.css. Overrides ZONE 5 (left speed tape) and
+   ZONE 6 (right altitude tape + VSI + RA + AoA) only, to match
+   reference 1000081522_1_wpqr.jpg: floating glowing tape lines,
+   boxed current value with side pointer, panel-less readouts.
+   No layout moves outside these zones; class names unchanged. */
+
+/* --- Tape panels: from glass boxes to near-invisible carriers ---
+   Reference tapes float with no visible panel. Keep a whisper of
+   glass (task: "subtle glass panels") so canvases still read over
+   bright sky, but drop border/shadow that boxed the base tapes. */
+.hf-tape-panel {
+  background: rgba(10, 14, 22, 0.16);
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  padding: 2px;
+  border-radius: 8px;
+}
+/* Wider canvases: numerals + spine + trend bar (left) and
+   numerals + VSI track (right) need the room the reference uses. */
+.hf-spd-canvas { width: 74px; height: clamp(170px, 34vh, 280px); }
+.hf-alt-canvas { width: 94px; height: clamp(170px, 34vh, 280px); }
+
+/* --- Current-value boxes: white border + side pointer triangle ---
+   Speed box sits right of its tape, pointer on its left edge
+   pointing left at the spine. Altitude box mirrors it. Pointer is
+   a CSS triangle (border trick) with a soft cyan halo; the canvas
+   caret in tapes.js lands on the same centre line. */
+.hf-tape-value {
+  padding: 5px 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  background: rgba(10, 14, 22, 0.80);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5), 0 0 10px rgba(62, 242, 255, 0.18);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.hf-spd-value { left: 100%; margin-left: 3px; }
+.hf-alt-value { right: 100%; margin-right: 3px; }
+.hf-tape-value::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.hf-spd-value::before {
+  right: 100%;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 8px solid rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 0 4px rgba(62, 242, 255, 0.55));
+}
+.hf-alt-value::before {
+  left: 100%;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 0 4px rgba(62, 242, 255, 0.55));
+}
+/* Warning states recolour border + pointer together. */
+.hf-tape-value.hf-ok-green { border-color: var(--hf-green); color: var(--hf-green); }
+.hf-tape-value.hf-warn-red { border-color: var(--hf-red); color: var(--hf-red); }
+.hf-spd-value.hf-ok-green::before { border-right-color: var(--hf-green); }
+.hf-alt-value.hf-ok-green::before { border-left-color: var(--hf-green); }
+.hf-spd-value.hf-warn-red::before { border-right-color: var(--hf-red); }
+.hf-alt-value.hf-warn-red::before { border-left-color: var(--hf-red); }
+
+/* --- GS / MACH (left, below tape): panel-less text like reference --- */
+.hf-gs-panel {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 2px 2px 0;
+  gap: 1px;
+}
+.hf-gs-panel .hf-kv { gap: 10px; }
+.hf-gs-panel .hf-label { font-size: 10px; letter-spacing: 0.14em; }
+.hf-gs-panel .hf-value { font-size: 14px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(62, 242, 255, 0.18); }
+
+/* --- RA / AoA (right, below VSI): panel-less, stacked, right-aligned ---
+   Reference stacks label over value ("RA" / "268 m", "AOA" / "0.9°").
+   RA DOM is a single .hf-kv row — stack it via flex-direction.
+   AoA DOM is already label-over-value — just right-align it. */
+.hf-ra-panel,
+.hf-aoa-panel {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 2px 2px 0;
+}
+.hf-ra-panel .hf-kv {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+.hf-ra-panel .hf-label,
+.hf-aoa-panel .hf-label { font-size: 10px; letter-spacing: 0.14em; }
+.hf-ra-panel .hf-value { font-size: 15px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); }
+.hf-aoa-panel { align-items: flex-end; min-width: 0; text-align: right; }
+.hf-aoa-value { font-size: 15px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); }
+/* Low-RA / high-AoA warnings: no panel border to recolour now —
+   carry the warning on the value text + glow instead. */
+.hf-ra-panel.hf-ra-low { border-color: transparent; }
+.hf-ra-panel.hf-ra-low .hf-value {
+  font-size: 17px;
+  color: var(--hf-amber);
+  text-shadow: 0 0 9px rgba(255, 181, 71, 0.6), 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.hf-aoa-panel.hf-warn-amber { border-color: transparent; }
+.hf-aoa-panel.hf-warn-amber .hf-aoa-value {
+  color: var(--hf-amber);
+  text-shadow: 0 0 9px rgba(255, 181, 71, 0.6), 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.hf-aoa-panel.hf-warn-red { border-color: transparent; }
+.hf-aoa-panel.hf-warn-red .hf-aoa-value {
+  color: var(--hf-red);
+  text-shadow: 0 0 9px rgba(255, 90, 90, 0.6), 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+/* --- Compact stages: keep the reference proportions, shrink type --- */
+@media (max-width: 900px), (max-height: 560px) {
+  .hf-spd-canvas { width: 62px; height: clamp(96px, 20vh, 210px); }
+  .hf-alt-canvas { width: 80px; height: clamp(96px, 20vh, 210px); }
+  .hf-tape-value { font-size: 12px; padding: 3px 7px; }
+  .hf-spd-value::before { border-top-width: 5px; border-bottom-width: 5px; border-right-width: 6px; }
+  .hf-alt-value::before { border-top-width: 5px; border-bottom-width: 5px; border-left-width: 6px; }
+  .hf-ra-panel, .hf-aoa-panel { padding: 2px; }
+  .hf-ra-panel .hf-value, .hf-aoa-value { font-size: 13px; }
+  .hf-gs-panel { padding: 2px; }
+  .hf-gs-panel .hf-value { font-size: 12px; }
+}
+
+/* ----- sections/bottom.css ----- */
+/* === HUD FULL · BOTTOM SECTION (zones 7–9, refined vs reference) ===
+   Load AFTER concept-ui.css (/* === CONCEPT: HUD FULL === */).
+   Reference: hud-target-full.png bottom strip — circular radar + P/R/Y
+   card (BL), unified systems dock + guide strip (BC), panel-less
+   engine telemetry + systems pill (BR). Dark glass, cyan #3EF2FF,
+   green #4CFF9A, amber #FFB547, red #FF5A5A. Same .hf-* class names
+   as the base; new hooks: .hf-pry-row/.hf-pry-bar/.hf-pry-stack,
+   .hf-sys-icon, .hf-gear-dots/.hf-gear-dot, .hf-eng-head,
+   .hf-fuel-bar/.hf-fuel-fill, .hf-eng-grid/.hf-eng-cell,
+   .hf-sys-check, .hf-sys-warning, .hf-chip-off. */
+
+/* ---------- ZONE 7: BOTTOM-LEFT ---------- */
+.hf-bl { align-items: flex-end; gap: 12px; }
+.hf-map-panel {
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: 0 0 22px rgba(62, 242, 255, 0.10), 0 8px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.hf-map-canvas {
+  width: clamp(118px, 24vmin, 188px);
+  height: clamp(118px, 24vmin, 188px);
+  border-radius: 50%;
+}
+.hf-pry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 118px;
+  padding: 9px 12px 10px 10px;
+}
+.hf-pry-row { display: flex; align-items: stretch; gap: 8px; }
+.hf-pry-bar {
+  flex: 0 0 auto;
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.hf-pry-pitch .hf-pry-bar { background: #4da3ff; box-shadow: 0 0 7px rgba(77, 163, 255, 0.55); }
+.hf-pry-roll .hf-pry-bar { background: var(--hf-green); box-shadow: 0 0 7px rgba(76, 255, 154, 0.55); }
+.hf-pry-yaw .hf-pry-bar { background: var(--hf-amber); box-shadow: 0 0 7px rgba(255, 181, 71, 0.55); }
+.hf-pry-stack { display: flex; flex-direction: column; gap: 0; line-height: 1.15; }
+.hf-pry-stack .hf-label { font-size: 10px; letter-spacing: 0.14em; }
+.hf-pry-value { font-size: 16px; font-weight: 800; }
+.hf-pry-pitch .hf-pry-value { color: #6db6ff; text-shadow: 0 0 8px rgba(77, 163, 255, 0.45); }
+.hf-pry-roll .hf-pry-value { color: var(--hf-green); text-shadow: 0 0 8px rgba(76, 255, 154, 0.45); }
+.hf-pry-yaw .hf-pry-value { color: var(--hf-amber); text-shadow: 0 0 8px rgba(255, 181, 71, 0.45); }
+
+/* ---------- ZONE 8: BOTTOM-CENTRE ---------- */
+/* One unified dock panel; chips become transparent columns with
+   hairline dividers (reference: single glass pill, 5 columns). */
+.hf-sys-row {
+  gap: 0;
+  padding: 9px 6px 8px;
+  background: rgba(10, 14, 22, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 6px 20px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.hf-sys-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 1px;
+  padding: 2px 4px 1px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.hf-sys-chip + .hf-sys-chip { border-left: 1px solid rgba(255, 255, 255, 0.10); }
+.hf-sys-icon {
+  display: inline-flex;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 0;
+  margin-bottom: 3px;
+}
+.hf-sys-chip .hf-label { font-size: 10px; letter-spacing: 0.14em; }
+.hf-sys-value { font-size: 13px; letter-spacing: 0.04em; }
+.hf-sys-chip.hf-chip-on { border-color: transparent; }
+.hf-sys-chip.hf-chip-on .hf-sys-icon { color: var(--hf-green); filter: drop-shadow(0 0 5px rgba(76, 255, 154, 0.6)); }
+.hf-sys-chip.hf-chip-on .hf-sys-value { color: var(--hf-green); text-shadow: 0 0 7px rgba(76, 255, 154, 0.5); }
+.hf-sys-chip.hf-chip-amber { border-color: transparent; }
+.hf-sys-chip.hf-chip-amber .hf-sys-icon { color: var(--hf-amber); filter: drop-shadow(0 0 5px rgba(255, 181, 71, 0.55)); }
+.hf-sys-chip.hf-chip-amber .hf-sys-value { color: var(--hf-amber); text-shadow: 0 0 7px rgba(255, 181, 71, 0.45); }
+.hf-sys-chip.hf-chip-off .hf-sys-icon { color: rgba(255, 255, 255, 0.38); }
+.hf-sys-chip.hf-chip-off .hf-sys-value,
+.hf-sys-chip.hf-chip-off .hf-label { color: rgba(255, 255, 255, 0.42); }
+.hf-sys-chip.hf-gear-down { border-color: transparent; }
+.hf-sys-chip.hf-gear-down .hf-sys-icon { color: rgba(255, 255, 255, 0.9); }
+.hf-sys-chip.hf-gear-moving { border-color: transparent; animation: hf-blink-amber 1s steps(1, end) infinite; }
+.hf-sys-chip.hf-gear-moving .hf-sys-icon { color: var(--hf-amber); }
+.hf-sys-chip.hf-gear-up { border-color: transparent; }
+.hf-gear-dots { display: inline-flex; gap: 4px; margin-top: 3px; line-height: 0; }
+.hf-gear-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+.hf-gear-dots.hf-dots-down .hf-gear-dot { background: var(--hf-green); box-shadow: 0 0 6px rgba(76, 255, 154, 0.7); }
+.hf-gear-dots.hf-dots-moving .hf-gear-dot { background: var(--hf-amber); box-shadow: 0 0 6px rgba(255, 181, 71, 0.7); }
+.hf-gear-dots.hf-dots-up .hf-gear-dot { background: rgba(255, 255, 255, 0.22); box-shadow: none; }
+
+/* Guide strip: bare text with flanking rules (no panel in reference). */
+.hf-dest-bar {
+  width: min(340px, 100%);
+  padding: 2px 4px 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-align: center;
+}
+.hf-dest-bar-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  font-size: 14px;
+  letter-spacing: 0.10em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
+.hf-dest-bar-text::before,
+.hf-dest-bar-text::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35));
+}
+.hf-dest-bar-text::after { background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent); }
+.hf-dest-progress { height: 2px; margin-top: 6px; background: rgba(255, 255, 255, 0.10); }
+
+/* ---------- ZONE 9: BOTTOM-RIGHT ---------- */
+/* Panel-less in the reference: telemetry sits on the scene with
+   hairline dividers; only the systems strip is a pill. */
+.hf-eng-panel {
+  width: 100%;
+  padding: 2px 2px 0;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.hf-eng-panel .hf-screw { display: none; }
+.hf-thr-row, .hf-fuel-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+.hf-eng-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.hf-eng-head .hf-label { font-size: 10.5px; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.72); }
+.hf-eng-pct { font-size: 14px; margin-left: 0; }
+.hf-thr-bar, .hf-fuel-bar {
+  position: relative;
+  display: block;
+  flex: none;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.hf-thr-bar::after, .hf-fuel-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, rgba(6, 12, 20, 0.45) 0 1px, transparent 1px 10%);
+  pointer-events: none;
+}
+.hf-thr-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--hf-cyan), var(--hf-green));
+  box-shadow: 0 0 9px rgba(76, 255, 154, 0.5);
+  transition: width 0.12s linear;
+}
+.hf-fuel-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--hf-green), #c6ff5e);
+  box-shadow: 0 0 9px rgba(76, 255, 154, 0.5);
+  transition: width 0.2s linear;
+}
+.hf-fuel-row.hf-warn-amber .hf-fuel-fill { background: linear-gradient(90deg, var(--hf-amber), #ffd75e); box-shadow: 0 0 9px rgba(255, 181, 71, 0.55); }
+.hf-fuel-row.hf-warn-red .hf-fuel-fill { background: linear-gradient(90deg, var(--hf-red), #ff8a5e); box-shadow: 0 0 9px rgba(255, 90, 90, 0.6); }
+.hf-fuel-row.hf-warn-amber .hf-eng-pct { color: var(--hf-amber); }
+.hf-fuel-row.hf-warn-red .hf-eng-pct { color: var(--hf-red); }
+
+.hf-eng-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+.hf-eng-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 4px 4px;
+  text-align: center;
+}
+.hf-eng-cell:nth-child(3n + 2),
+.hf-eng-cell:nth-child(3n) { border-left: 1px solid rgba(255, 255, 255, 0.10); }
+.hf-eng-cell:nth-child(n + 4) { border-top: 1px solid rgba(255, 255, 255, 0.10); }
+.hf-eng-cell .hf-label { font-size: 9.5px; letter-spacing: 0.12em; color: rgba(255, 255, 255, 0.60); }
+.hf-eng-cell .hf-eng-value { margin-left: 0; font-size: 14px; text-align: center; }
+
+/* Systems strip: outlined pill with status badge (reference bottom-right). */
+.hf-sys-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--hf-green);
+  border-radius: 9px;
+  background: rgba(10, 14, 22, 0.45);
+  box-shadow: 0 0 12px rgba(76, 255, 154, 0.18), inset 0 0 10px rgba(76, 255, 154, 0.06);
+}
+.hf-sys-strip-text { flex: 1 1 auto; }
+.hf-sys-check {
+  flex: 0 0 auto;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  color: #04220f;
+  background: var(--hf-green);
+  box-shadow: 0 0 8px rgba(76, 255, 154, 0.55);
+}
+.hf-sys-strip.hf-sys-caution {
+  border-color: var(--hf-amber);
+  box-shadow: 0 0 12px rgba(255, 181, 71, 0.20), inset 0 0 10px rgba(255, 181, 71, 0.07);
+}
+.hf-sys-strip.hf-sys-caution .hf-sys-strip-text { color: var(--hf-amber); text-shadow: 0 0 7px rgba(255, 181, 71, 0.45); }
+.hf-sys-strip.hf-sys-caution .hf-sys-check { background: var(--hf-amber); box-shadow: 0 0 8px rgba(255, 181, 71, 0.55); }
+.hf-sys-strip.hf-sys-warning {
+  border-color: var(--hf-red);
+  box-shadow: 0 0 12px rgba(255, 90, 90, 0.25), inset 0 0 10px rgba(255, 90, 90, 0.08);
+}
+.hf-sys-strip.hf-sys-warning .hf-sys-strip-text { color: var(--hf-red); text-shadow: 0 0 7px rgba(255, 90, 90, 0.5); }
+.hf-sys-strip.hf-sys-warning .hf-sys-check { background: var(--hf-red); color: #2b0505; box-shadow: 0 0 8px rgba(255, 90, 90, 0.6); }
+.hf-caution-chip { margin-left: 0; }
+
+/* Compact stages: keep the three bottom zones from colliding. */
+@media (max-width: 900px), (max-height: 560px) {
+  .hf-map-canvas { width: clamp(84px, 20vmin, 112px); height: clamp(84px, 20vmin, 112px); }
+  .hf-pry-card { min-width: 96px; padding: 6px 9px 7px 8px; gap: 5px; }
+  .hf-pry-value { font-size: 13px; }
+  .hf-sys-row { padding: 6px 3px 5px; }
+  .hf-sys-icon svg { width: 17px; height: 17px; }
+  .hf-sys-value { font-size: 10px; }
+  .hf-dest-bar-text { font-size: 12px; }
+  .hf-eng-panel { gap: 3px; }
+  .hf-eng-pct { font-size: 12px; }
+  .hf-eng-cell .hf-eng-value { font-size: 12px; }
+  .hf-sys-strip { padding: 4px 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-thr-fill, .hf-fuel-fill { transition: none; }
+}
+/* === END HUD FULL · BOTTOM SECTION === */
+
+
+/* ----- HUD-V2 MERGE FIX (integrator, merged file only) -----
+   Right-edge column (Zone 6) vs bottom-right stack (Zone 9) overlap at
+   720p after concatenation: AoA readout landed on the THROTTLE % line.
+   Section sources are untouched; this block only rebalances vertical
+   space between the two zones in the merged build. */
+.hf-right { top: 47%; gap: 5px; }
+.hf-spd-canvas, .hf-alt-canvas { height: clamp(170px, 32vh, 262px); }
+
+
 /* === CONCEPT: HUD FULL WIRING === */
 /* hud.js wiring for the FULL HUD (hud-full.js): keep the transient
    overlays hud.js still owns (warning pills, toast, view label, keys
@@ -2039,3 +2713,239 @@ body .screen-v6#screen-campaign .campaign-medal-name {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85), 0 0 10px rgba(34, 230, 255, 0.3);
 }
 /* === END DEBRIEF/CAMPAIGN LIVE BACKDROP === */
+
+/* === CONCEPT: TITLE VEHICLES + CONTROLS GUIDE ===
+   Vehicle selection panel (top of the title left column), the
+   gameplay controls guide card (centre-bottom) and keycap footer
+   hints. The left column now carries panel + logo + menu inside
+   the 1280x720 stage, so the emblem badge retires, the neon logo
+   shrinks and the menu buttons tighten — same glass language as
+   the logbook card. */
+
+#screen-title .title-emblem-stage { display: none; }
+#screen-title.visible { padding-top: 22px; padding-bottom: 66px; }
+#screen-title .title-left { gap: 8px; }
+#screen-title .title-neon-logo { width: 360px; }
+#screen-title .title-menu { margin-top: 8px; gap: 8px; }
+#screen-title .btn-menu { min-height: 56px; }
+
+/* --- selected vehicle panel --- */
+.vehicle-panel {
+  position: relative;
+  width: 440px;
+  max-width: 100%;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: linear-gradient(180deg, rgba(20, 42, 72, 0.66) 0%, rgba(6, 14, 28, 0.78) 100%);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--cx-radius-l);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 2px 0 rgba(255, 200, 50, 0.45), var(--glow-panel);
+}
+.vehicle-panel .btn-corner { width: 16px; height: 16px; }
+.vehicle-panel .btn-corner-tl { top: -6px; left: -6px; }
+.vehicle-panel .btn-corner-tr { top: -6px; right: -6px; }
+.vehicle-panel .btn-corner-bl { bottom: -6px; left: -6px; }
+.vehicle-panel .btn-corner-br { bottom: -6px; right: -6px; }
+.vehicle-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vehicle-panel-icon { display: flex; color: var(--neon-gold); }
+.vehicle-panel-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+.vehicle-panel-spacer { flex: 1 1 auto; }
+.vehicle-stage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vehicle-arrow {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 14, 28, 0.5);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--cx-radius-s);
+  color: var(--neon-gold);
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.vehicle-arrow:hover,
+.vehicle-arrow:focus-visible {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: var(--glow-cyan);
+  outline: none;
+}
+.vehicle-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cx-radius-m);
+  background: radial-gradient(ellipse at 50% 62%, rgba(34, 230, 255, 0.12), rgba(6, 14, 28, 0.35) 72%);
+  overflow: hidden;
+}
+.vehicle-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(34, 230, 255, 0.35));
+}
+.vehicle-preview-fallback {
+  display: flex;
+  color: var(--neon-cyan);
+  opacity: 0.75;
+  filter: drop-shadow(0 0 8px rgba(34, 230, 255, 0.5));
+}
+.vehicle-name {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+.vehicle-stats {
+  text-align: center;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.62);
+}
+.vehicle-stats-value {
+  color: var(--neon-gold);
+  font-weight: 800;
+}
+.vehicle-thumbs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.vehicle-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px 5px;
+  background: rgba(6, 14, 28, 0.45);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+.vehicle-thumb:hover,
+.vehicle-thumb:focus-visible {
+  border-color: var(--neon-cyan);
+  outline: none;
+}
+.vehicle-thumb.selected {
+  border-color: var(--neon-cyan);
+  background: rgba(34, 230, 255, 0.10);
+  box-shadow: var(--glow-cyan);
+  color: #ffffff;
+}
+.vehicle-thumb-img {
+  width: 100%;
+  height: 34px;
+  object-fit: contain;
+}
+.vehicle-thumb-fallback {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  color: var(--neon-cyan);
+  opacity: 0.8;
+}
+.vehicle-thumb-name {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* --- gameplay controls guide (centre-bottom) --- */
+.controls-guide {
+  position: absolute;
+  left: 548px;
+  bottom: 92px;
+  width: 276px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  background: linear-gradient(180deg, rgba(20, 42, 72, 0.66) 0%, rgba(6, 14, 28, 0.78) 100%);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--cx-radius-l);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glow-panel);
+}
+.controls-guide-head {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--neon-cyan);
+  text-transform: uppercase;
+  text-shadow: var(--glow-text-cyan);
+}
+.controls-guide-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.cg-label {
+  margin-left: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+}
+.cg-sep,
+.cg-colon {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* --- keycaps on the title screen (panel head, guide, footer) --- */
+#screen-title .vehicle-panel .keycap,
+#screen-title .controls-guide .keycap,
+#screen-title .title-footer-hint .keycap {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+  font-weight: 800;
+}
+#screen-title .title-footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: normal;
+}
+.title-footer-hint-sep { color: rgba(255, 255, 255, 0.4); }
+.title-footer-hint-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--ui-text-3);
+}
+/* === END CONCEPT: TITLE VEHICLES + CONTROLS GUIDE === */

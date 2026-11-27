@@ -14,15 +14,17 @@ const STAGE_W = 1280;
 const STAGE_H = 720;
 const FAR = 10000; // park the virtual sun this far along its direction
 
-// Ghost chain, dawn-family tints only (amber / rose / peach — cooler
-// hues fought the orange sky). `at` is the fraction along the
-// sun->centre line (1 = centre), `size` is stage px.
+// Ghost chain, golden-hour tints only (gold / peach / rose — cooler
+// hues fought the warm sky). Kept gentle: peaks softened for the
+// golden-hour grade so the flare whispers instead of shouting.
+// `at` is the fraction along the sun->centre line (1 = centre),
+// `size` is stage px.
 const GHOST_SPECS = [
-  { at: 0.42, size: 46, rgb: '255,209,102', peak: 0.18, ring: false },
-  { at: 0.72, size: 22, rgb: '255,178,140', peak: 0.16, ring: false },
-  { at: 1.18, size: 90, rgb: '255,158,130', peak: 0.1, ring: true },
-  { at: 1.45, size: 34, rgb: '255,158,100', peak: 0.18, ring: false },
-  { at: 1.9, size: 140, rgb: '255,209,102', peak: 0.07, ring: true },
+  { at: 0.42, size: 46, rgb: '255,217,138', peak: 0.14, ring: false },
+  { at: 0.72, size: 22, rgb: '255,192,150', peak: 0.12, ring: false },
+  { at: 1.18, size: 90, rgb: '255,179,150', peak: 0.08, ring: true },
+  { at: 1.45, size: 34, rgb: '255,179,128', peak: 0.14, ring: false },
+  { at: 1.9, size: 140, rgb: '255,217,138', peak: 0.05, ring: true },
 ];
 
 const sat = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -105,9 +107,9 @@ export function createLensFlare(stage) {
     if (layer.style.display !== '') layer.style.display = '';
 
     place(glow, sunX, sunY);
-    glow.style.opacity = (0.8 * strength).toFixed(3);
+    glow.style.opacity = (0.65 * strength).toFixed(3);
     place(streak, sunX, sunY);
-    streak.style.opacity = (0.4 * strength).toFixed(3);
+    streak.style.opacity = (0.3 * strength).toFixed(3);
 
     const midX = STAGE_W / 2;
     const midY = STAGE_H / 2;

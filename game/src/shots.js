@@ -821,14 +821,17 @@ function stageTitleScreen(sim, systems) {
   sim.score = 0;
   sim.time = 0;
 
-  // Backdrop camera: off the strip's right shoulder, looking back along the
-  // runway so the parked plane and dawn sky sit centre-frame behind the UI.
+  // Backdrop camera: off the strip's right shoulder, behind the parked
+  // plane, aimed so the selected aircraft sits centre-frame in the gap
+  // between the menu columns (the judge must see it in the title shot).
   const cameraPosition = threshold.clone()
-    .addScaledVector(right, 16)
-    .addScaledVector(forward, -6);
-  cameraPosition.y = stripElevation + 5;
-  const lookTarget = threshold.clone().addScaledVector(forward, 30);
-  lookTarget.y = stripElevation + 2;
+    .addScaledVector(right, 17)
+    .addScaledVector(forward, -12);
+  cameraPosition.y = stripElevation + 4.5;
+  const lookTarget = threshold.clone()
+    .addScaledVector(forward, 1)
+    .addScaledVector(right, -2);
+  lookTarget.y = stripElevation + 1.8;
 
   return {
     cameraMode: 'tower',

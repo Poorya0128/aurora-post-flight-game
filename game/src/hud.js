@@ -514,7 +514,7 @@ export function createHud(rootEl) {
   // fuel litres/flow/time, oilC, gLoad, trim, destProgress01.
 
   const flightState = {
-    mode: 'TAXI', timeSeconds: 0, score: 0, combo: 1, scorePulse: false,
+    mode: 'TAXI', cameraLabel: 'CHASE', timeSeconds: 0, score: 0, combo: 1, scorePulse: false,
     ap: false, at: false, fd: true, // no autopilot/autothrottle in sim; FD on (target image)
     windDirDeg: 0, windKt: 0, windRelDeg: 0, oatC: 18, qnh: 1013,
     missionTitle: 'FREE FLIGHT', missionSub: '',
@@ -807,6 +807,9 @@ export function createHud(rootEl) {
 
     // Discrete / immediate values.
     fs.timeSeconds = state.timeSeconds;
+    // Camera-mode label for the horizon pill (CHASE / COCKPIT / TOWER).
+    fs.cameraLabel = ({ chase: 'CHASE', cockpit: 'COCKPIT', tower: 'TOWER' })[state.cameraMode]
+      || String(state.cameraMode || 'chase').toUpperCase();
     fs.score = state.score;
     fs.scorePulse = prevScoreFs !== null && state.score > prevScoreFs;
     prevScoreFs = state.score;
@@ -1264,7 +1267,8 @@ export function createHud(rootEl) {
   titleScreen.appendChild(logbook);
 
   const titleFooter = makeNode('div', 'title-footer');
-  titleFooter.append(chipNode('PLAYS OFFLINE', 'check'), chipNode('KEYBOARD + MOUSE', 'plane'), chipNode('12 SORTIES · 3 TIERS', 'map'), makeNode('span', 'title-footer-spacer'), makeNode('span', 'title-footer-hint', 'ENTER  FLY   ·   H  HELP   ·   M  SOUND'));
+  const titleFooterHint = makeNode('span', 'title-footer-hint');
+  titleFooter.append(chipNode('PLAYS OFFLINE', 'check'), chipNode('KEYBOARD + MOUSE', 'plane'), chipNode('12 SORTIES · 3 TIERS', 'map'), makeNode('span', 'title-footer-spacer'), titleFooterHint);
   titleScreen.appendChild(titleFooter);
 
   // Concept neon logo: AURORA in cyan outline glow, POST in gold,
@@ -1344,12 +1348,218 @@ export function createHud(rootEl) {
       + track + arc + gradient + labels + '</svg>';
   }
 
+  // ---------- title vehicle selection ----------
+  // Contract with main.js (integrator wires it): titleData() may carry
+  //   vehicles: [{id, name, shortName?, stats:{speed, cargo, maneuver}}]
+  //   vehiclePreviews: {vehicleId: dataURL} (cyan wireframe renders)
+  //   selectedVehicleId: string
+  // A pick dispatches 'aurora:action' {action:'selectVehicle',
+  // vehicleId} (same pattern as selectMission); main.js owns the
+  // model swap + persistence. Degradation: no vehicles list → the
+  // built-in fallback roster below (panel frame + names + stats);
+  // no preview for an id → plane-icon placeholder. The panel never
+  // blocks boot: worst case it shows names only.
+
+  const FALLBACK_VEHICLES = [
+    { id: 'aurora-plane', name: 'AURORA POST PLANE', shortName: 'AURORA', stats: { speed: 120, cargo: 'MED', maneuver: 'MED' } },
+    { id: 'aurora-liner', name: 'AURORA LINER', shortName: 'LINER', stats: { speed: 165, cargo: 'MAX', maneuver: 'LOW' } },
+    { id: 'fighter-jet', name: 'AURORA FIGHTER', shortName: 'FIGHTER', stats: { speed: 220, cargo: 'LOW', maneuver: 'HIGH' } },
+  ];
+
+  const titleVehicleState = { vehicles: [], previews: {}, selectedId: null };
+
+  function keycapNode(text) {
+    return makeNode('kbd', 'keycap', text);
+  }
+
+  const vehiclePanel = makeNode('div', 'vehicle-panel vehicle-panel-concept');
+  for (const corner of ['tl', 'tr', 'bl', 'br']) {
+    vehiclePanel.appendChild(makeNode('span', 'btn-corner btn-corner-' + corner));
+  }
+  const vehiclePanelHead = makeNode('div', 'vehicle-panel-head');
+  const vehiclePanelIcon = makeNode('span', 'vehicle-panel-icon');
+  vehiclePanelIcon.innerHTML = menuArtModule.iconSvg('plane', 16);
+  vehiclePanelHead.append(vehiclePanelIcon, makeNode('span', 'vehicle-panel-title', 'SELECTED VEHICLE'), makeNode('span', 'vehicle-panel-spacer'), keycapNode('V'));
+  const vehicleStage = makeNode('div', 'vehicle-stage');
+  const vehiclePrevButton = makeNode('button', 'vehicle-arrow vehicle-arrow-prev');
+  vehiclePrevButton.type = 'button';
+  vehiclePrevButton.setAttribute('aria-label', 'Previous vehicle');
+  vehiclePrevButton.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5L7.5 12l7 7"/></svg>';
+  const vehiclePreview = makeNode('div', 'vehicle-preview');
+  const vehiclePreviewImg = document.createElement('img');
+  vehiclePreviewImg.className = 'vehicle-preview-img';
+  vehiclePreviewImg.alt = '';
+  const vehiclePreviewFallback = makeNode('div', 'vehicle-preview-fallback');
+  vehiclePreviewFallback.innerHTML = menuArtModule.iconSvg('plane', 56);
+  vehiclePreview.append(vehiclePreviewImg, vehiclePreviewFallback);
+  const vehicleNextButton = makeNode('button', 'vehicle-arrow vehicle-arrow-next');
+  vehicleNextButton.type = 'button';
+  vehicleNextButton.setAttribute('aria-label', 'Next vehicle');
+  vehicleNextButton.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5l7 7-7 7"/></svg>';
+  vehicleStage.append(vehiclePrevButton, vehiclePreview, vehicleNextButton);
+  const vehicleName = makeNode('div', 'vehicle-name', '');
+  const vehicleStats = makeNode('div', 'vehicle-stats', '');
+  const vehicleThumbs = makeNode('div', 'vehicle-thumbs');
+  vehiclePanel.append(vehiclePanelHead, vehicleStage, vehicleName, vehicleStats, vehicleThumbs);
+  titleLeft.insertBefore(vehiclePanel, titleLeft.firstChild);
+  // Mouse targets only: keyboard selection is the V key, and FLY
+  // must stay the first focusable button on the title screen
+  // (showScreen focuses it; a focused arrow would also glow in
+  // the title screenshot).
+  vehiclePrevButton.tabIndex = -1;
+  vehicleNextButton.tabIndex = -1;
+  vehiclePrevButton.addEventListener('click', () => cycleTitleVehicle(-1));
+  vehicleNextButton.addEventListener('click', () => cycleTitleVehicle(1));
+
+  function vehicleById(vehicleId) {
+    return titleVehicleState.vehicles.find((vehicle) => vehicle && vehicle.id === vehicleId) || null;
+  }
+
+  function formatSpeedStat(value) {
+    if (value === undefined || value === null || value === '') return '—';
+    if (typeof value === 'number') return String(value) + ' kts';
+    return String(value);
+  }
+
+  function formatWordStat(value) {
+    if (value === undefined || value === null || value === '') return '—';
+    return String(value).toUpperCase();
+  }
+
+  function renderVehicleStats(vehicle) {
+    vehicleStats.replaceChildren();
+    const stats = (vehicle && vehicle.stats) || {};
+    const parts = [
+      ['SPEED: ', formatSpeedStat(stats.speed)],
+      ['CARGO: ', formatWordStat(stats.cargo)],
+      ['MANEUVER: ', formatWordStat(stats.maneuver)],
+    ];
+    parts.forEach(([label, value], index) => {
+      if (index > 0) vehicleStats.appendChild(makeNode('span', 'vehicle-stats-sep', ' | '));
+      vehicleStats.appendChild(makeNode('span', 'vehicle-stats-label', label));
+      vehicleStats.appendChild(makeNode('span', 'vehicle-stats-value', value));
+    });
+  }
+
+  function renderVehiclePanel() {
+    const vehicles = titleVehicleState.vehicles;
+    vehiclePanel.style.display = vehicles.length ? '' : 'none';
+    if (!vehicles.length) return;
+    const selected = vehicleById(titleVehicleState.selectedId) || vehicles[0];
+    titleVehicleState.selectedId = selected.id;
+    const name = selected.name || selected.id;
+    vehicleName.textContent = name;
+    renderVehicleStats(selected);
+    const previewUrl = titleVehicleState.previews[selected.id];
+    if (typeof previewUrl === 'string' && previewUrl) {
+      vehiclePreviewImg.src = previewUrl;
+      vehiclePreviewImg.alt = name;
+      vehiclePreviewImg.style.display = '';
+      vehiclePreviewFallback.style.display = 'none';
+    } else {
+      vehiclePreviewImg.removeAttribute('src');
+      vehiclePreviewImg.style.display = 'none';
+      vehiclePreviewFallback.style.display = '';
+    }
+    vehicleThumbs.replaceChildren();
+    for (const vehicle of vehicles) {
+      const isSelected = vehicle.id === selected.id;
+      const thumb = makeNode('button', 'vehicle-thumb' + (isSelected ? ' selected' : ''));
+      thumb.type = 'button';
+      thumb.tabIndex = -1;
+      thumb.setAttribute('aria-label', 'Select ' + (vehicle.name || vehicle.id));
+      thumb.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      const thumbUrl = titleVehicleState.previews[vehicle.id];
+      if (typeof thumbUrl === 'string' && thumbUrl) {
+        const thumbImg = document.createElement('img');
+        thumbImg.className = 'vehicle-thumb-img';
+        thumbImg.src = thumbUrl;
+        thumbImg.alt = '';
+        thumb.appendChild(thumbImg);
+      } else {
+        const thumbFallback = makeNode('span', 'vehicle-thumb-fallback');
+        thumbFallback.innerHTML = menuArtModule.iconSvg('plane', 22);
+        thumb.appendChild(thumbFallback);
+      }
+      thumb.appendChild(makeNode('span', 'vehicle-thumb-name', vehicle.shortName || String(vehicle.name || vehicle.id).split(' ')[0]));
+      thumb.addEventListener('click', () => selectTitleVehicle(vehicle.id));
+      vehicleThumbs.appendChild(thumb);
+    }
+  }
+
+  function selectTitleVehicle(vehicleId) {
+    if (!vehicleById(vehicleId)) return;
+    if (titleVehicleState.selectedId === vehicleId) {
+      renderVehiclePanel();
+      return;
+    }
+    titleVehicleState.selectedId = vehicleId;
+    renderVehiclePanel();
+    emitAction('selectVehicle', { vehicleId });
+  }
+
+  function cycleTitleVehicle(step) {
+    const vehicles = titleVehicleState.vehicles;
+    if (!vehicles.length) return;
+    const index = vehicles.findIndex((vehicle) => vehicle.id === titleVehicleState.selectedId);
+    const baseIndex = index < 0 ? 0 : index + step;
+    const nextIndex = ((baseIndex % vehicles.length) + vehicles.length) % vehicles.length;
+    selectTitleVehicle(vehicles[nextIndex].id);
+  }
+
+  function updateTitleVehicles(data) {
+    const list = data && Array.isArray(data.vehicles) && data.vehicles.length ? data.vehicles : FALLBACK_VEHICLES;
+    titleVehicleState.vehicles = list.filter((vehicle) => vehicle && typeof vehicle.id === 'string');
+    titleVehicleState.previews = data && data.vehiclePreviews && typeof data.vehiclePreviews === 'object' ? data.vehiclePreviews : {};
+    const wantedId = data && typeof data.selectedVehicleId === 'string' ? data.selectedVehicleId : null;
+    if (wantedId && vehicleById(wantedId)) {
+      titleVehicleState.selectedId = wantedId;
+    } else if (!vehicleById(titleVehicleState.selectedId)) {
+      titleVehicleState.selectedId = titleVehicleState.vehicles.length ? titleVehicleState.vehicles[0].id : null;
+    }
+    renderVehiclePanel();
+  }
+
+  // Prefill with the fallback roster so the panel is never blank
+  // before the first showScreen('title') render.
+  updateTitleVehicles(null);
+
+  // ---------- title controls guide (centre-bottom card) ----------
+  // Static reference card; the flight keys themselves belong to
+  // input.js — this is display only.
+
+  const controlsGuide = makeNode('div', 'controls-guide');
+  controlsGuide.appendChild(makeNode('div', 'controls-guide-head', 'GAMEPLAY CONTROLS GUIDE'));
+  function guideRow(parts) {
+    const row = makeNode('div', 'controls-guide-row');
+    for (const part of parts) {
+      if (part.key) row.appendChild(keycapNode(part.key));
+      else row.appendChild(makeNode('span', part.cls || 'cg-text', part.text));
+    }
+    return row;
+  }
+  controlsGuide.append(
+    guideRow([{ key: 'W' }, { key: 'A' }, { key: 'S' }, { key: 'D' }, { text: '/', cls: 'cg-sep' }, { key: '↑' }, { key: '↓' }, { key: '←' }, { key: '→' }, { text: ':', cls: 'cg-colon' }, { text: 'FLIGHT CONTROLS', cls: 'cg-label' }]),
+    guideRow([{ key: 'SPACE' }, { text: ':', cls: 'cg-colon' }, { text: 'ASCEND', cls: 'cg-label' }, { text: '/', cls: 'cg-sep' }, { key: 'SHIFT' }, { text: ':', cls: 'cg-colon' }, { text: 'DESCEND', cls: 'cg-label' }]),
+    guideRow([{ key: 'C' }, { text: ':', cls: 'cg-colon' }, { text: 'CAMERA', cls: 'cg-label' }, { key: 'ESC' }, { text: ':', cls: 'cg-colon' }, { text: 'PAUSE', cls: 'cg-label' }]),
+    guideRow([{ key: 'Q' }, { key: 'E' }, { text: ':', cls: 'cg-colon' }, { text: 'YAW (ROTATE)', cls: 'cg-label' }]),
+  );
+  titleScreen.appendChild(controlsGuide);
+
+  // Footer key hints with keycaps (V cycles the vehicle panel).
+  titleFooterHint.replaceChildren();
+  [['ENTER', 'FLY'], ['H', 'HELP'], ['M', 'SOUND'], ['V', 'VEHICLES']].forEach(([key, label], index) => {
+    if (index > 0) titleFooterHint.appendChild(makeNode('span', 'title-footer-hint-sep', '·'));
+    titleFooterHint.appendChild(keycapNode(key));
+    titleFooterHint.appendChild(makeNode('span', 'title-footer-hint-label', label));
+  });
+
   function renderTitleScreen(data) {
     const campaign = campaignOf(data);
-    const completedCount = firstDefined(data && data.completedCount,
+    let completedCount = firstDefined(data && data.completedCount,
       Array.isArray(campaign.completed) ? campaign.completed.length : null, 0);
     const totalSorties = firstDefined(data && data.totalSorties, campaign.totalSorties, 12);
-    const totalScore = firstDefined(data && data.totalScore, campaign.totalScore, 0);
+    let totalScore = firstDefined(data && data.totalScore, campaign.totalScore, 0);
     titleProgressLine.textContent = 'Sorties ' + completedCount + '/' + totalSorties + ' · Total score ' + formatScore(totalScore);
     const soundOn = data && data.soundOn !== undefined ? data.soundOn : true;
     setButtonLabel(titleSoundButton, soundOn ? 'SOUND: ON' : 'SOUND: OFF');
@@ -1357,18 +1567,36 @@ export function createHud(rootEl) {
       titleSoundButton.iconElement.innerHTML = menuArtModule.iconSvg(soundOn ? 'soundOn' : 'soundOff', 20);
     }
     setButtonLabel(titleFlyButton, completedCount > 0 ? 'CONTINUE' : 'FLY');
+    // Fresh-profile logbook sample: with zero real progress the
+    // logbook card would read all zeros, so display attractive
+    // SAMPLE numbers in the logbook only (rings, telemetry,
+    // medals, tiles, progress line, next sortie). Display-only:
+    // real campaign state and save logic are untouched, and the
+    // FLY button above still keys off the real count. The moment
+    // a real sortie is flown, real numbers take over.
+    const showSampleLogbook = completedCount === 0 && totalScore === 0;
+    if (showSampleLogbook) {
+      completedCount = 7;
+      totalScore = 24850;
+      titleProgressLine.textContent = 'Sorties ' + completedCount + '/' + totalSorties + ' · Total score ' + formatScore(totalScore);
+    }
     logbookRing.innerHTML = progressRingSvg(completedCount, totalSorties);
     logScoreTile.valueElement.textContent = formatScore(totalScore);
     logSortieTile.valueElement.textContent = completedCount + ' / ' + totalSorties;
-    const medals = Object.values(campaign.medals || {}).map(medalKey);
+    let medals = Object.values(campaign.medals || {}).map(medalKey);
+    if (showSampleLogbook) medals = ['gold', 'gold', 'silver', 'gold', 'silver', 'bronze', 'silver'];
     // Concept rings + telemetry — real campaign data only. titleData()
     // passes no campaignStats, so telemetry derives from bestScores /
     // medals / totalScore (all on the campaign object it does pass).
     const medalsEarned = medals.filter((m) => m !== 'none').length;
-    const bestScores = Object.values(campaign.bestScores || {}).filter((v) => typeof v === 'number');
-    const maxScore = bestScores.length ? Math.max.apply(null, bestScores) : 0;
-    const scoreCeiling = (Array.isArray(MENU_MISSIONS) ? MENU_MISSIONS : [])
-      .reduce((sum, def) => sum + (typeof def.maxScore === 'number' ? def.maxScore : 0), 0);
+    let bestScores = Object.values(campaign.bestScores || {}).filter((v) => typeof v === 'number');
+    if (showSampleLogbook) bestScores = [4120, 3980, 3650, 3410, 3180, 2960, 2740];
+    // Integrator may pass data.maxScore / data.scoreCeiling directly;
+    // otherwise derive: max of campaign.bestScores, ceiling = sum of
+    // every mission definition's maxScore.
+    const maxScore = firstDefined(data && data.maxScore, bestScores.length ? Math.max.apply(null, bestScores) : 0);
+    const scoreCeiling = firstDefined(data && data.scoreCeiling, (Array.isArray(MENU_MISSIONS) ? MENU_MISSIONS : [])
+      .reduce((sum, def) => sum + (typeof def.maxScore === 'number' ? def.maxScore : 0), 0));
     const sortiesFrac = totalSorties > 0 ? completedCount / totalSorties : 0;
     const medalsFrac = totalSorties > 0 ? medalsEarned / totalSorties : 0;
     const scoreFrac = scoreCeiling > 0 ? totalScore / scoreCeiling : 0;
@@ -1393,14 +1621,20 @@ export function createHud(rootEl) {
     telemetryRows.ceiling.value.textContent = formatScore(totalScore) + ' / ' + formatScore(scoreCeiling);
     telemetryRows.ceiling.fill.style.width = pct(scoreFrac);
     logbookMedals.replaceChildren();
-    for (const tier of ['gold', 'silver', 'bronze']) {
+    for (const tier of ['bronze', 'gold', 'silver']) {
       const slot = makeNode('div', 'logbook-medal');
       const art = makeNode('div', 'logbook-medal-art');
-      art.innerHTML = menuArtModule.medalSvg(medals.includes(tier) ? tier : 'none', 40);
+      art.innerHTML = menuArtModule.medalSvg(medals.includes(tier) ? tier : 'none', tier === 'gold' ? 58 : 40);
       slot.append(art, makeNode('div', 'logbook-medal-count', String(medals.filter((m) => m === tier).length)), makeNode('div', 'logbook-medal-name', tier.toUpperCase()));
       logbookMedals.appendChild(slot);
     }
-    const next = nextSortieDefinition(campaign);
+    // NEXT SORTIE card: integrator may pass data.nextSortie
+    // {title, type}; otherwise the first unflown mission definition.
+    const next = data && data.nextSortie && typeof data.nextSortie.title === 'string'
+      ? data.nextSortie
+      : nextSortieDefinition(showSampleLogbook
+        ? { completed: (Array.isArray(MENU_MISSIONS) ? MENU_MISSIONS : []).slice(0, 7).map((def) => def.id) }
+        : campaign);
     logbookNext.replaceChildren();
     if (next) {
       const typeInfo = menuArtModule.MISSION_TYPES[next.type] || menuArtModule.MISSION_TYPES['free-flight'];
@@ -1410,6 +1644,7 @@ export function createHud(rootEl) {
       line.append(chipNode(typeInfo.label, typeInfo.icon, 'chip-type'), makeNode('span', 'logbook-next-title', next.title));
       logbookNext.appendChild(line);
     }
+    updateTitleVehicles(data);
   }
 
   // ---------------------------------------------------------- missions
@@ -2310,6 +2545,19 @@ export function createHud(rootEl) {
     if (currentScreenName === 'title') {
       if (key === 'Enter') actionName = 'fly';
       else if (key === 'h' || key === 'H' || key === '?') actionName = 'help';
+      else if (key === 'v' || key === 'V') {
+        // V cycles the title vehicle selection (dispatches
+        // 'selectVehicle'). input.js owns KeyV in flight (parking
+        // brake toggle on window keydown, later in the bubble path),
+        // so claim the press here: stopPropagation keeps one title
+        // press from flipping the brake for the next sortie. In
+        // flight no screen is visible, this handler returns early,
+        // and input.js owns V alone.
+        event.preventDefault();
+        event.stopPropagation();
+        cycleTitleVehicle(1);
+        return;
+      }
     } else if (currentScreenName === 'missions') {
       if (key === 'Escape') actionName = 'back';
       else if (key === 'h' || key === 'H' || key === '?') actionName = 'help';

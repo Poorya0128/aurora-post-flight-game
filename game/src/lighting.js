@@ -12,27 +12,29 @@
 // fill, cockpit view only — invisible and costless in chase/tower).
 
 import * as THREE from 'three';
+import { isLow } from './quality.js'; // visual upgrade: LOW drops shadow res
 
-// Warm golden-hour key / cool sky fill balance, matched to the user's
-// chase + tower references (deep purple zenith, orange horizon, strong
-// warm raking sun, cool readable shadow sides) and the cockpit
-// reference (warm sun across the panel, hazy layered distance).
+// Golden-hour balance matched to the user's reference set (env1–env9):
+// blue-violet zenith, pale lavender-blue mid (round 2), peach horizon, warm gold sun,
+// soft readable shadow sides. Exposure 0.9 (post.js composite reads
+// renderer.toneMappingExposure) with sun/hemi/env intensities tuned
+// so the scene reads bright golden, not dark.
 const LIGHTING = {
-  exposure: 1.28, // ACES (render.js) was 1.15 — references sit brighter/golden
-  sunColor: 0xff9e57, // deeper golden-hour orange (was 0xffb27a)
-  sunIntensity: 3.4, // was 3.0 — stronger raking key, crisper modelling
-  hemiSky: 0x8a7bc8, // lavender zenith bounce (was 0x7a5c8f)
-  hemiGround: 0x2e4a52, // teal sea/terrain bounce (was 0x123c5a)
-  hemiIntensity: 0.85, // was 1.2 — less wash, deeper readable shadows
-  ambientColor: 0x3d4a6b, // cooler ambient (was 0x4a5a7a)
-  ambientIntensity: 0.22, // was 0.45 — ambient flattens; fill lights do the work
-  fillColor: 0x6b8fd4, // cool western sky fill, opposite the sun
-  fillIntensity: 0.55,
-  bounceColor: 0xffb27a, // warm ground/sea bounce from below the horizon
-  bounceIntensity: 0.3,
-  fogColor: 0xe08a5e, // warm haze between sky horizon and mid (was 0xe8a07a)
-  fogNear: 550, // was 800 — aerial perspective starts sooner
-  fogFar: 5200, // was 6000 — distant islands layer into haze like the refs
+  exposure: 0.9, // ACES; post.js composite honours this value
+  sunColor: 0xffc07a, // warm gold key
+  sunIntensity: 3.0, // strong raking golden-hour key
+  hemiSky: 0xa8a8d8, // round 2: lavender-blue sky bounce, synced to render.js PALETTE.hemisphereSky (was 0xb89ad8)
+  hemiGround: 0x6b5a3a, // olive-brown ground bounce
+  hemiIntensity: 0.6,
+  ambientColor: 0x8a7fb8, // warm-violet ambient (env map carries most of it)
+  ambientIntensity: 0.10,
+  fillColor: 0x7a8fd4, // cool western sky fill, opposite the sun
+  fillIntensity: 0.45,
+  bounceColor: 0xffc07a, // warm ground/sea bounce from below the horizon
+  bounceIntensity: 0.25,
+  envIntensity: 0.55, // scene.environmentIntensity (PMREM sky IBL)
+  fogColor: 0xf5b88a, // peach horizon haze (FogExp2)
+  fogDensity: 0.00016, // ~21% fog at 3 km, ~60% at 6 km
   shadowBias: -0.0003, // was -0.0004
   shadowNormalBias: 0.4, // was 1.5 — 1.5 m detached shadows (peter-panning);
   // 4096 map over a 300 m frustum = 7.3 cm texels, so 0.4 m (~5 texels)
@@ -75,22 +77,23 @@ function buildSunsetEnvironment(renderer) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0.0, '#2b3a67'); // zenith
-    gradient.addColorStop(0.38, '#7a5c8f'); // mid lavender
-    gradient.addColorStop(0.5, '#ff9e64'); // horizon orange
-    gradient.addColorStop(0.54, '#e88b4a'); // just below horizon
-    gradient.addColorStop(0.62, '#123c5a'); // sea
-    gradient.addColorStop(1.0, '#0a2438'); // deep sea / ground
+    gradient.addColorStop(0.0, '#4b5cc4'); // blue-violet zenith
+    gradient.addColorStop(0.30, '#8f8fd2'); // blue-violet upper sky (round 2, was #9a7fd0)
+    gradient.addColorStop(0.44, '#b8a9d9'); // pale lavender-blue mid (round 2, was pink #d48bc4)
+    gradient.addColorStop(0.5, '#ffb380'); // peach horizon
+    gradient.addColorStop(0.54, '#c98a5e'); // just below horizon (warm land/sea mix)
+    gradient.addColorStop(0.64, '#1c4a6e'); // sea
+    gradient.addColorStop(1.0, '#122e44'); // deep sea / ground
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 512, 256);
     // Sun glow + disc at the horizon (east). Drawn twice (wrapped) so
     // the seam never cuts the glow.
     for (const cx of [384, 384 - 512]) {
       const glow = ctx.createRadialGradient(cx, 128, 2, cx, 128, 90);
-      glow.addColorStop(0, 'rgba(255,240,200,1)');
-      glow.addColorStop(0.12, 'rgba(255,209,102,0.85)');
-      glow.addColorStop(0.45, 'rgba(255,158,100,0.35)');
-      glow.addColorStop(1, 'rgba(255,158,100,0)');
+      glow.addColorStop(0, 'rgba(255,246,216,1)');
+      glow.addColorStop(0.12, 'rgba(255,217,138,0.85)');
+      glow.addColorStop(0.45, 'rgba(255,179,128,0.35)');
+      glow.addColorStop(1, 'rgba(255,179,128,0)');
       ctx.fillStyle = glow;
       ctx.fillRect(cx - 90, 38, 180, 180);
     }
@@ -119,6 +122,15 @@ export function applyLighting(renderer, scene) {
     sunLight.shadow.bias = LIGHTING.shadowBias;
     sunLight.shadow.normalBias = LIGHTING.shadowNormalBias;
     sunLight.shadow.radius = 2; // honoured by PCF; PCFSoft uses its own kernel
+    // LOW quality: halve the shadow map (4096 -> 2048). Disposing the
+    // old map forces three to realloc at the new size.
+    if (isLow() && sunLight.shadow.mapSize.x !== 2048) {
+      sunLight.shadow.mapSize.set(2048, 2048);
+      if (sunLight.shadow.map) {
+        sunLight.shadow.map.dispose();
+        sunLight.shadow.map = null;
+      }
+    }
     const cam = sunLight.shadow.camera;
     cam.left = -LIGHTING.shadowExtent;
     cam.right = LIGHTING.shadowExtent;
@@ -152,17 +164,24 @@ export function applyLighting(renderer, scene) {
   scene.add(bounceLight);
   scene.add(bounceLight.target);
 
-  if (scene.fog && scene.fog.isFog) {
+  if (scene.fog && scene.fog.isFogExp2) {
     scene.fog.color.setHex(LIGHTING.fogColor);
-    scene.fog.near = LIGHTING.fogNear;
-    scene.fog.far = LIGHTING.fogFar;
+    scene.fog.density = LIGHTING.fogDensity;
+  } else if (scene.fog && scene.fog.isFog) {
+    scene.fog.color.setHex(LIGHTING.fogColor);
   }
 
-  // Per-material envMap (assigned in polishMaterials), NOT
-  // scene.environment: scene-wide IBL compiles env sampling into every
-  // standard material, including the terrain that fills most fragments
-  // — needless SwiftShader cost. Only reflective surfaces get the map.
+  // Scene-wide PMREM sky IBL: every PBR surface picks up golden-hour
+  // sky light (terrain included — the references' soft violet shadow
+  // sides come from exactly this term). polishMaterials only tunes
+  // per-surface envMapIntensity on top of the scene environment.
   const environment = buildSunsetEnvironment(renderer);
+  if (environment) {
+    scene.environment = environment;
+    if (typeof scene.environmentIntensity === 'number') {
+      scene.environmentIntensity = LIGHTING.envIntensity;
+    }
+  }
 
   scene.userData.lighting = {
     fillLight, bounceLight, environment, polished: false,
@@ -213,9 +232,9 @@ function ensureInteriorLights(scene) {
 // (world + aircraft exist by the first updateSky call): sky-reflection
 // strength by surface type, plus a water sheen for the sea. Emissive
 // colours/intensities (rings, lamps, gauges) are left exactly as their
-// owners tuned them — only envMap + envMapIntensity are added.
+// owners tuned them — only envMapIntensity is tuned (the map itself
+// comes from scene.environment, set in applyLighting).
 function polishMaterials(scene) {
-  const environment = scene.userData.lighting && scene.userData.lighting.environment;
   const seen = new Set();
   scene.traverse((object) => {
     if (!object.isMesh) return;
@@ -223,29 +242,28 @@ function polishMaterials(scene) {
     for (const material of materials) {
       if (!material || !material.isMeshStandardMaterial || seen.has(material)) continue;
       seen.add(material);
-      // Terrain + merged vertex-coloured props: no envMap at all — they
-      // cover most fragments and matte diffuse gains nothing from IBL.
+      // Terrain + merged vertex-coloured props keep the default
+      // envMapIntensity (1.0 x scene.environmentIntensity) — they
+      // cover most fragments and the sky IBL is what lifts their
+      // shadow sides to the references' soft violet.
       if (material.vertexColors && object.name !== 'sea-plane') continue;
       let intensity = null;
       if (object.name === 'sea-plane') {
-        // Water: let the sunset environment reflect. Roughness 0.85 was
-        // tuned for a world without IBL (VD-10); with the env map the
-        // surface can carry a real sky sheen instead of flat navy.
+        // Water: let the golden-hour environment reflect. Roughness
+        // 0.85 was tuned for a world without IBL (VD-10); with the
+        // env map the surface carries a real sky sheen.
         material.roughness = 0.45;
-        intensity = 0.7;
+        intensity = 0.8;
       } else if (material.metalness >= 0.3) {
         intensity = 1.0; // metal, canopy glass, bezels
       } else if (object.name.startsWith('trim-')) {
-        intensity = 0.45; // cockpit trim (door cards, leather, fabric):
-        // a touch more env definition so moulded/leather surfaces keep
-        // readable shading in the cockpit view instead of going flat
+        intensity = 0.4; // cockpit trim (door cards, leather, fabric)
       } else if (material.roughness <= 0.3) {
         intensity = 0.9; // glossy paint / glass-like
       } else {
-        intensity = 0.3; // painted skin, wood, matte props
+        intensity = 0.35; // painted skin, wood, matte props
       }
-      if (environment && intensity !== null) {
-        material.envMap = environment;
+      if (intensity !== null) {
         material.envMapIntensity = intensity;
         material.needsUpdate = true;
       }
