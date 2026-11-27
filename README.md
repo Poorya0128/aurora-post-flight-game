@@ -1,27 +1,8 @@
-<!--
-  ============================================================================
-  BEFORE SUBMITTING — two spots to fill when the GitHub repository is created
-  ============================================================================
-  The two badges marked {owner}/{repo} below must carry the real GitHub
-  owner and repository name (exactly as entered) or the make.fun
-  repo_readme check refuses the entry. Replace BOTH occurrences:
-
-      {owner}  ->  the GitHub account that owns this repository
-      {repo}   ->  this repository's name
-
-  Then delete this comment block and push before submitting.
-  Also set the repository's GitHub About (repo_about check): website
-  https://make.fun/bounty/best-flight-game-20261126-0057 and topic makefun
-  (ai-agents and bounties recommended). See dossier.md in the workspace
-  for the exact gh command.
-  ============================================================================
--->
-
 # AURORA POST
 
-[![make.fun bounty](https://make.fun/badge/best-flight-game-20261126-0057.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
-[![rank](https://make.fun/badge/best-flight-game-20261126-0057/{owner}/{repo}/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
-[![reward](https://make.fun/badge/best-flight-game-20261126-0057/{owner}/{repo}/reward.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
+[![make.fun · best-flight-game-20261126-0057](https://make.fun/badge/best-flight-game-20261126-0057.svg)](https://make.fun/bounty/best-flight-game-20261126-0057?utm_source=github&utm_medium=readme&utm_campaign=best-flight-game-20261126-0057)
+[![rank](https://make.fun/badge/best-flight-game-20261126-0057/Poorya0128/aurora-post-flight-game/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-flight-game-20261126-0057)
+[![reward](https://make.fun/badge/best-flight-game-20261126-0057/Poorya0128/aurora-post-flight-game/reward.svg)](https://make.fun/bounty/best-flight-game-20261126-0057?utm_source=github&utm_medium=readme&utm_campaign=best-flight-game-20261126-0057)
 
 Entered in the make.fun bounty **Make the best flight game**:
 https://make.fun/bounty/best-flight-game-20261126-0057
